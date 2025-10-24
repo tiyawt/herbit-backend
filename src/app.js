@@ -4,7 +4,6 @@ import cors from "cors";
 import morgan from "morgan";
 import routes from "./routes/routes.js";
 import passport from "./config/passport.js";
-import routes from "./routes/routes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 
 const app = express();
