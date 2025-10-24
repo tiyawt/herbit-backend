@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import User from "../models/user.js";
-import AuthCredential from "../models/AuthCredential.js";
+import AuthCredential from "../models/authCredential.js";
 import { sendResetPasswordEmail } from "../services/emailService.js";
 import { ok, fail } from "../utils/response.js";
 
@@ -12,11 +12,12 @@ export async function forgotPassword(req, res) {
     if (!user) return fail(res, "USER_NOT_FOUND", "Email tidak ditemukan", 404);
 
     const token = crypto.randomBytes(32).toString("hex");
-    const expiry = Date.now() + 15 * 60 * 1000;
+    const expiry = new Date(Date.now() + 15 * 60 * 1000); // 15 menit
 
     await AuthCredential.findOneAndUpdate(
-      { user_id: user._id },
-      { reset_token: token, reset_token_expiry: expiry }
+      { userId: user._id },
+      { $set: { resetToken: token, resetTokenExpiry: expiry } },
+      { new: true, upsert: true }
     );
 
     const rawUsername = user.username || user.name || "Sahabat Herbit";
@@ -33,23 +34,33 @@ export async function forgotPassword(req, res) {
 export async function resetPassword(req, res) {
   try {
     const { token, new_password } = req.body;
+
     const cred = await AuthCredential.findOne({
-      reset_token: token,
-      reset_token_expiry: { $gt: Date.now() },
-    });
-    if (!cred)
+      resetToken: token,
+      resetTokenExpiry: { $gt: new Date() },
+    }).select("+passwordHash +resetToken +resetTokenExpiry");
+
+    if (!cred) {
       return fail(
         res,
         "INVALID_OR_EXPIRED_TOKEN",
         "Token tidak valid atau kadaluarsa",
         400
       );
+    }
 
     const hash = await bcrypt.hash(new_password, 10);
-    cred.password_hash = hash;
-    cred.reset_token = null;
-    cred.reset_token_expiry = null;
-    await cred.save();
+
+    await AuthCredential.updateOne(
+      { _id: cred._id },
+      {
+        $set: {
+          passwordHash: hash,
+          resetToken: null,
+          resetTokenExpiry: null,
+        },
+      }
+    );
 
     return ok(res, {}, "Password berhasil direset");
   } catch (e) {
