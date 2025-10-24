@@ -1,6 +1,7 @@
 // src/jobs/notificationScheduler.js
 import cron from "node-cron";
 import mongoose from "mongoose";
+import User from "../models/user.js";
 import {
   pushDailyTaskNotif,
   pushEcoenzymProgressNotif,
@@ -8,7 +9,6 @@ import {
 } from "../services/notificationService.js";
 import { daysBetween } from "../utils/date.js";
 
-const Users = () => mongoose.connection.collection("users");
 const EcoenzymProjects = () =>
   mongoose.connection.collection("ecoenzym_projects");
 const Vouchers = () => mongoose.connection.collection("vouchers");
@@ -19,32 +19,32 @@ export function initNotificationSchedulers() {
     return;
   }
 
-  // 1) Daily Task — 08:00 WIB
+  // 1️⃣ Daily Task — tiap hari 08:00 WIB
   cron.schedule(
-    "00 08 * * *",
+    "0 8 * * *",
     async () => {
       console.log(
         "🕒 DailyTask cron:",
         new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })
       );
-      const cursor = Users().find({}, { projection: { _id: 1 } });
+
+      const users = await User.find({}, "_id");
       let count = 0;
-      for await (const u of cursor) {
+      for (const u of users) {
         try {
           await pushDailyTaskNotif(u._id);
           count++;
         } catch (e) {
-          if (e.code === 11000) {
-            /* dupe, skip */
-          } else console.error("❌ pushDailyTaskNotif:", e);
+          if (e.code !== 11000) console.error("❌ pushDailyTaskNotif:", e);
         }
       }
+
       console.log(`✅ Daily task notifications done (created=${count})`);
     },
     { timezone: "Asia/Jakarta" }
   );
 
-  // 2) Ecoenzym — 08:00 WIB
+  // 2️⃣ Ecoenzym — tiap hari 08:00 WIB
   cron.schedule(
     "0 8 * * *",
     async () => {
@@ -52,33 +52,36 @@ export function initNotificationSchedulers() {
         "🕒 Ecoenzym cron:",
         new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })
       );
+
       const today = new Date();
       const projects = EcoenzymProjects().find(
         { status: { $in: ["ongoing", "active"] } },
         { projection: { _id: 1, user_id: 1, start_date: 1, end_date: 1 } }
       );
+
       let count = 0;
       for await (const p of projects) {
         if (!p.start_date) continue;
         if (p.end_date && today > new Date(p.end_date)) continue;
+
         const d = daysBetween(new Date(p.start_date), today);
-        if ([30, 60, 90].includes(d)) {
-          try {
-            await pushEcoenzymProgressNotif(p.user_id, p._id, d);
-            count++;
-          } catch (e) {
-            if (e.code === 11000) {
-              /* dupe, skip */
-            } else console.error("❌ pushEcoenzym:", e);
-          }
+        const milestones = [7, 14, 21, 28, 35, 42, 49, 56, 63, 70, 77, 84, 90];
+        if (!milestones.includes(d)) continue;
+
+        try {
+          await pushEcoenzymProgressNotif(p.user_id, p._id, d);
+          count++;
+        } catch (e) {
+          if (e.code !== 11000) console.error("❌ pushEcoenzym:", e);
         }
       }
+
       console.log(`✅ Ecoenzym notifications checked (created=${count})`);
     },
     { timezone: "Asia/Jakarta" }
   );
 
-  // 3) Voucher — 09:00 WIB (H-1)
+  // 3️⃣ Voucher — H-1 sebelum expired (09:00 WIB)
   cron.schedule(
     "0 9 * * *",
     async () => {
@@ -86,28 +89,27 @@ export function initNotificationSchedulers() {
         "🕒 Voucher cron:",
         new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })
       );
+
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
-      const start = new Date(tomorrow);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(tomorrow);
-      end.setHours(23, 59, 59, 999);
+      const start = new Date(tomorrow.setHours(0, 0, 0, 0));
+      const end = new Date(tomorrow.setHours(23, 59, 59, 999));
 
       const vouchers = Vouchers().find(
         { valid_until: { $gte: start, $lte: end } },
-        { projection: { _id: 1, user_id: 1, valid_until: 1 } }
+        { projection: { _id: 1, user_id: 1 } }
       );
+
       let count = 0;
       for await (const v of vouchers) {
         try {
           await pushVoucherExpiring(v.user_id, v._id);
           count++;
         } catch (e) {
-          if (e.code === 11000) {
-            /* dupe, skip */
-          } else console.error("❌ pushVoucher:", e);
+          if (e.code !== 11000) console.error("❌ pushVoucher:", e);
         }
       }
+
       console.log(`✅ Voucher notifications checked (created=${count})`);
     },
     { timezone: "Asia/Jakarta" }
