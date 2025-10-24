@@ -19,9 +19,9 @@ export function initNotificationSchedulers() {
     return;
   }
 
-  // 1) Daily Task — 13:50 WIB 
+  // 1) Daily Task — 08:00 WIB
   cron.schedule(
-    "50 13 * * *",
+    "00 08 * * *",
     async () => {
       console.log(
         "🕒 DailyTask cron:",
