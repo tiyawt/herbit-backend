@@ -3,7 +3,7 @@ const { Schema, Types } = mongoose;
 
 const authCredentialSchema = new Schema(
   {
-    user_id: {
+    userId: {
       type: Types.ObjectId,
       ref: "User",
       required: true,
@@ -11,7 +11,7 @@ const authCredentialSchema = new Schema(
       index: true,
     },
     // Local auth
-    password_hash: {
+    passwordHash: {
       type: String,
       default: null,
       select: false,
@@ -23,7 +23,7 @@ const authCredentialSchema = new Schema(
       enum: [null, "google"],
       default: null,
     },
-    provider_id: {
+    providerId: {
       type: String,
       default: null,
       index: true,
@@ -31,24 +31,24 @@ const authCredentialSchema = new Schema(
     },
 
     // Forgot password fields
-    reset_token: {
+    resetToken: {
       type: String,
       default: null,
       select: false,
     },
-    reset_token_expiry: {
+    resetTokenExpiry: {
       type: Date,
       default: null,
       select: false,
     },
   },
   {
-    timestamps: { createdAt: "created_at", updatedAt: "updated_at" },
+    timestamps: { createdAt: "createdAt", updatedAt: "updatedAt" },
   }
 );
 
 export default mongoose.model(
   "AuthCredential",
   authCredentialSchema,
-  "auth_credentials"
+  "authCredentials"
 );
