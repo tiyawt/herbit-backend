@@ -12,12 +12,12 @@ export async function pushDailyTaskNotif(userId, date = new Date()) {
   const dayBucket = date.toISOString().slice(0, 10); // YYYY-MM-DD
   try {
     return await notification.create({
-      user_id: userId,
+      userId: userId,
       type: "daily_task",
       title: TITLES.daily_task,
       message:
         "Ada 5 aksi kecil menunggu kamu. Yuk checklist biar pohonmu makin rimbun!",
-      day_bucket: dayBucket,
+      dayBucket: dayBucket,
     });
   } catch (e) {
     if (e.code === 11000) return null; // sudah ada untuk hari ini
@@ -90,14 +90,16 @@ export async function pushEcoenzymProgressNotif(userId, projectId, dayNumber) {
 
   const stage = stages[dayNumber];
   if (!stage) return null; // skip kalau bukan hari milestone
+  const dayBucket = new Date().toISOString().slice(0,10);
 
   try {
     return await notification.create({
-      user_id: userId,
+      userId: userId,
       type: "ecoenzym_project",
       title: `Hari ke-${dayNumber} — ${stage.title}`,
       message: stage.message,
-      reference_id: projectId,
+      referenceId: projectId,
+      dayBucket,
     });
   } catch (e) {
     if (e.code === 11000) return null;
@@ -106,13 +108,15 @@ export async function pushEcoenzymProgressNotif(userId, projectId, dayNumber) {
 }
 
 export async function pushGameSortingInvite(userId, gameSessionId) {
+  const dayBucket = new Date().toISOString().slice(0,10);
   try {
     return await notification.create({
-      user_id: userId,
+      userId: userId,
       type: "game_sorting",
       title: TITLES.game_sorting,
       message: "Pilah sampah dengan benar dan dapatkan poin",
-      reference_id: gameSessionId,
+      referenceId: gameSessionId,
+      dayBucket, 
     });
   } catch (e) {
     if (e.code === 11000) return null;
@@ -121,14 +125,16 @@ export async function pushGameSortingInvite(userId, gameSessionId) {
 }
 
 export async function pushVoucherExpiring(userId, voucherId) {
+  const dayBucket = new Date().toISOString().slice(0,10);
   try {
     return await notification.create({
-      user_id: userId,
+      userId: userId,
       type: "voucher",
       title: TITLES.voucher,
       message:
         "Voucher kamu akan expired besok 🎟️, segera tukarkan sebelum hilang!",
-      reference_id: voucherId,
+      referenceId: voucherId,
+      dayBucket,
     });
   } catch (e) {
     if (e.code === 11000) return null;
@@ -141,22 +147,22 @@ export async function listUserNotifications(
   userId,
   { unreadOnly = false } = {}
 ) {
-  const q = { user_id: userId };
-  if (unreadOnly) q.is_read = false;
+  const q = { userId: userId };
+  if (unreadOnly) q.isRead = false;
   return notification.find(q).sort({ createdAt: -1 });
 }
 
 export async function markRead(notificationId) {
   return notification.findByIdAndUpdate(
     notificationId,
-    { is_read: true },
+    { isRead: true },
     { new: true }
   );
 }
 
 export async function markAllRead(userId, type) {
-  const q = { user_id: userId };
+  const q = { userId: userId };
   if (type) q.type = type;
-  await notification.updateMany(q, { $set: { is_read: true } });
+  await notification.updateMany(q, { $set: { isRead: true } });
   return { ok: true };
 }

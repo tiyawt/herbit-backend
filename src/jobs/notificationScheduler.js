@@ -10,7 +10,7 @@ import {
 import { daysBetween } from "../utils/date.js";
 
 const EcoenzymProjects = () =>
-  mongoose.connection.collection("ecoenzym_projects");
+  mongoose.connection.collection("ecoenzymProjects");
 const Vouchers = () => mongoose.connection.collection("vouchers");
 
 export function initNotificationSchedulers() {
@@ -21,7 +21,7 @@ export function initNotificationSchedulers() {
 
   // 1️⃣ Daily Task — tiap hari 08:00 WIB
   cron.schedule(
-    "0 8 * * *",
+    "0 6 * * *",
     async () => {
       console.log(
         "🕒 DailyTask cron:",
@@ -56,20 +56,28 @@ export function initNotificationSchedulers() {
       const today = new Date();
       const projects = EcoenzymProjects().find(
         { status: { $in: ["ongoing", "active"] } },
-        { projection: { _id: 1, user_id: 1, start_date: 1, end_date: 1 } }
+        {
+          projection: {
+            _id: 1,
+            userId: 1,
+            startDate: 1,
+            endDate: 1,
+            status: 1,
+          },
+        }
       );
 
       let count = 0;
       for await (const p of projects) {
-        if (!p.start_date) continue;
-        if (p.end_date && today > new Date(p.end_date)) continue;
+        if (!p.startDate) continue;
+        if (p.endDate && today > new Date(p.endDate)) continue;
 
-        const d = daysBetween(new Date(p.start_date), today);
-        const milestones = [7, 14, 21, 28, 35, 42, 49, 56, 63, 70, 77, 84, 90];
+        const d = daysBetween(new Date(p.startDate), today);
+        const milestones = [7,14,21,30,35,42,49,56,60,70,77,84,90];
         if (!milestones.includes(d)) continue;
 
         try {
-          await pushEcoenzymProgressNotif(p.user_id, p._id, d);
+          await pushEcoenzymProgressNotif(p.userId, p._id, d);
           count++;
         } catch (e) {
           if (e.code !== 11000) console.error("❌ pushEcoenzym:", e);
@@ -96,14 +104,14 @@ export function initNotificationSchedulers() {
       const end = new Date(tomorrow.setHours(23, 59, 59, 999));
 
       const vouchers = Vouchers().find(
-        { valid_until: { $gte: start, $lte: end } },
-        { projection: { _id: 1, user_id: 1 } }
+        { validUntil: { $gte: start, $lte: end } },
+        { projection: { _id: 1, userId: 1 } }
       );
 
       let count = 0;
       for await (const v of vouchers) {
         try {
-          await pushVoucherExpiring(v.user_id, v._id);
+          await pushVoucherExpiring(v.userId, v._id);
           count++;
         } catch (e) {
           if (e.code !== 11000) console.error("❌ pushVoucher:", e);
