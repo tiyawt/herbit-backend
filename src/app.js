@@ -5,7 +5,7 @@ import morgan from "morgan";
 import routes from "./routes/routes.js";
 import passport from "./config/passport.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
-import gameRoutes from "./gameRoutes.js";
+import gameRoutes from "./routes/gameRoutes.js";
 
 
 const app = express();
