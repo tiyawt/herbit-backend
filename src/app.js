@@ -5,6 +5,8 @@ import morgan from "morgan";
 import routes from "./routes/routes.js";
 import passport from "./config/passport.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
+import gameRoutes from "./gameRoutes.js";
+
 
 const app = express();
 
@@ -21,5 +23,6 @@ app.get("/", (req, res) => {
 // All API routes
 app.use("/api", routes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/game", gameRoutes);
 
 export default app;
