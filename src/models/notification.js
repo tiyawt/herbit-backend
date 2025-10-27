@@ -22,16 +22,16 @@ const notificationSchema = new mongoose.Schema(
     referenceId: { type: mongoose.Schema.Types.ObjectId, default: null }, // ID sumber (task/project/game/voucher)
     isRead: { type: Boolean, default: false },
     scheduledFor: { type: Date, default: null },
-    // bucket_harian buat cegah duplikat notifikasi harian (daily_task)
     dayBucket: { type: String, default: null, index: true },
   },
   { timestamps: true }
 );
 
-// Cegah duplikat untuk kombinasi (user, type, reference) — buat game/voucher/ecoenzym
+// Cegah duplikat untuk kombinasi (user, type, reference) — buat ecoenzym & voucher
 notificationSchema.index(
   { userId: 1, type: 1, referenceId: 1, dayBucket: 1 },
   {
+    name: "notif_unique_ref",
     unique: true,
     partialFilterExpression: {
       referenceId: { $type: "objectId" },
@@ -40,14 +40,28 @@ notificationSchema.index(
   }
 );
 
-// Khusus daily_task: cegah > 1 notifikasi per hari per user
+// Daily Task — hanya 1 notifikasi per hari
 notificationSchema.index(
   { userId: 1, type: 1, dayBucket: 1 },
   {
+    name: "notif_daily_task_per_day",
     unique: true,
     partialFilterExpression: {
       dayBucket: { $type: "string" },
       type: "daily_task",
+    },
+  }
+);
+
+// Game Sorting — hanya 1 notifikasi per hari
+notificationSchema.index(
+  { userId: 1, type: 1, dayBucket: 1 },
+  {
+    name: "notif_game_sorting_per_day",
+    unique: true,
+    partialFilterExpression: {
+      dayBucket: { $type: "string" },
+      type: "game_sorting",
     },
   }
 );

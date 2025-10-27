@@ -115,8 +115,12 @@ export async function pushGameSortingInvite(userId, date = new Date()) {
       userId,
       type: "game_sorting",
       title: TITLES.game_sorting,
+<<<<<<< HEAD
       message: "Pilah sampah dengan benar dan dapatkan poin",
       referenceId: null,
+=======
+      message: "Pilah sampah dengan benar dan dapatkan poin 🔥 Klaim hadiahmu!",
+>>>>>>> 5416ffdbb0a969bf0c3abc3daa0403e3d9fb6565
       dayBucket,
     });
   } catch (e) {

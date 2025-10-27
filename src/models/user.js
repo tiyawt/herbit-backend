@@ -16,6 +16,9 @@ const userSchema = new Schema(
     photoUrl: { type: String, default: null },
     prePoints: { type: Number, default: 0 },
     totalPoints: { type: Number, default: 0 },
+    sortingStreak: { type: Number, default: 0 }, // streak berjalan
+    sortingBestStreak: { type: Number, default: 0 }, // rekor
+    sortingLastPlayedBucket: { type: String, default: null }, // "YYYY-MM-DD" WIB
   },
   { timestamps: { createdAt: "createdAt", updatedAt: "updatedAt" } }
 );
