@@ -1,0 +1,216 @@
+import DailyTask from "../models/dailyTask.js";
+import DailyTaskChecklist from "../models/dailyTaskChecklist.js";
+import EcoenzymProject from "../models/ecoenzymProject.js";
+import EcoenzymUploadProgress from "../models/ecoenzymUploadProgress.js";
+import User from "../models/user.js";
+import { listVouchers } from "./voucherService.js";
+
+const DEFAULT_VOUCHER_IMAGE = "/sample-voucher.jpg";
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+function seededRandom(seed) {
+  let x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+}
+
+function shuffleArray(array, seed) {
+  const result = [...array];
+  for (let i = result.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(seededRandom(seed + i) * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+function startOfDay(date = new Date()) {
+  const clone = new Date(date);
+  clone.setHours(0, 0, 0, 0);
+  return clone;
+}
+
+function endOfDay(date = new Date()) {
+  const clone = startOfDay(date);
+  clone.setDate(clone.getDate() + 1);
+  return clone;
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+async function buildHabitsToday(userId) {
+  const today = startOfDay();
+  const tomorrow = endOfDay();
+
+  const allTasks = await DailyTask.find().lean();
+  if (!allTasks.length) {
+    return {
+      habits: [],
+      total: 0,
+      completed: 0,
+      percent: 0,
+      date: today.toISOString(),
+    };
+  }
+
+  const localDate = new Date().toLocaleDateString("id-ID", {
+    timeZone: "Asia/Jakarta",
+  });
+
+  const [day, month, year] = localDate.split("/");
+  const seed = parseInt(
+    `${year}${month.padStart(2, "0")}${day.padStart(2, "0")}`
+  );
+  const shuffled = shuffleArray(allTasks, seed);
+  const selectedTasks = shuffled.slice(0, 5);
+
+  const selectedIds = selectedTasks.map((task) => task._id);
+  const checklists = await DailyTaskChecklist.find({
+    userId,
+    dailyTaskId: { $in: selectedIds },
+    $or: [
+      { completedAt: { $gte: today, $lt: tomorrow } },
+      { updatedAt: { $gte: today, $lt: tomorrow } },
+      { createdAt: { $gte: today, $lt: tomorrow } },
+    ],
+  })
+    .select({ dailyTaskId: 1, isCompleted: 1 })
+    .lean();
+  const checklistMap = new Map(
+    checklists.map((item) => [item.dailyTaskId.toString(), item])
+  );
+
+  const habits = selectedTasks.map((task) => {
+    const checklist = checklistMap.get(task._id.toString()) ?? null;
+    const done = checklist?.isCompleted ?? false;
+    return {
+      id: task._id?.toString() ?? null,
+      title: task.title,
+      category: task.category,
+      done,
+    };
+  });
+
+  const total = habits.length;
+  const completed = habits.filter((habit) => habit.done).length;
+  const percent = total ? Math.round((completed / total) * 100) : 0;
+
+  return {
+    habits,
+    total,
+    completed,
+    percent,
+    date: today.toISOString(),
+  };
+}
+
+async function buildEcoenzymSummary(userId) {
+  const [project, allProjects] = await Promise.all([
+    EcoenzymProject.findOne({
+      userId,
+      status: "ongoing",
+    })
+      .sort({ createdAt: -1 })
+      .lean(),
+    EcoenzymProject.find({ userId }).sort({ createdAt: 1 }).lean(),
+  ]);
+  if (!project) return null;
+
+  const now = new Date();
+  const start = project.startDate ? new Date(project.startDate) : now;
+  const end = project.endDate ? new Date(project.endDate) : now;
+  const totalDuration = Math.max(end.getTime() - start.getTime(), 1);
+  const elapsed = clamp(now.getTime() - start.getTime(), 0, totalDuration);
+  const progressPercent = Math.round((elapsed / totalDuration) * 100);
+  const daysRemaining = Math.max(
+    Math.ceil((end.getTime() - now.getTime()) / MS_PER_DAY),
+    0
+  );
+
+  const monthNumber = await EcoenzymUploadProgress.countDocuments({
+    ecoenzymProjectId: project._id,
+  });
+
+  const indexInHistory = allProjects.findIndex(
+    (item) => item._id.toString() === project._id.toString()
+  );
+  const batchNumber = indexInHistory >= 0 ? indexInHistory + 1 : 1;
+  return {
+    projectId: project._id?.toString() ?? null,
+    status: project.status,
+    progress: progressPercent,
+    monthNumber,
+    daysRemaining,
+    batchNumber,
+    info: { daysRemaining },
+  };
+}
+
+async function buildVoucherBanners(userId) {
+  try {
+    const response = await listVouchers({
+      userId: userId.toString(),
+      status: "active",
+      limit: 3,
+    });
+    const items = response?.items ?? [];
+    return items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      image:
+        item.banner ??
+        item.bannerUrl ??
+        item.image ??
+        item.imageUrl ??
+        DEFAULT_VOUCHER_IMAGE,
+      href: item.landingUrl ?? "#",
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function getHomeSummary(username) {
+  const user = await User.findOne({ username })
+    .select({
+      username: 1,
+      name: 1,
+      email: 1,
+      photoUrl: 1,
+      totalPoints: 1,
+    })
+    .lean();
+
+  if (!user?._id) {
+    const error = new Error("USER_NOT_FOUND");
+    error.status = 404;
+    throw error;
+  }
+
+  const userId = user._id;
+
+  const [habitSummary, ecoenzym, rewardsBanners] = await Promise.all([
+    buildHabitsToday(userId),
+    buildEcoenzymSummary(userId),
+    buildVoucherBanners(userId),
+  ]);
+
+  return {
+    user: {
+      id: userId.toString(),
+      name: user.name ?? user.username ?? user.email,
+      username: user.username ?? null,
+      photoUrl: user.photoUrl ?? null,
+      totalPoints: user.totalPoints ?? 0,
+    },
+    progress: {
+      date: habitSummary.date,
+      total: habitSummary.total,
+      completed: habitSummary.completed,
+      percent: habitSummary.percent,
+    },
+    ecoenzym,
+    rewardsBanners,
+    habitsToday: habitSummary.habits,
+  };
+}
