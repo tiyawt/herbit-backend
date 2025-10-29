@@ -39,7 +39,8 @@ dailyTaskChecklistSchema.pre("save", function (next) {
 
 const DailyTaskChecklist = mongoose.model(
   "DailyTaskChecklist",
-  dailyTaskChecklistSchema
+  dailyTaskChecklistSchema,
+  "dailyTaskChecklist"
 );
 
 export default DailyTaskChecklist;

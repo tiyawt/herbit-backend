@@ -1,6 +1,6 @@
 // controllers/dailytaskchecklist.controller.js
 import DailyTaskChecklist from "../models/dailyTaskChecklist.js";
-import DailyTask from "../models/dailyTask.js";
+import DailyTask from "../models/dailyTasks.js";
 
 // Get all checklist for a specific user
 export const getChecklistByUser = async (req, res) => {

@@ -26,6 +26,6 @@ const dailyTaskSchema = new mongoose.Schema(
   }
 );
 
-const DailyTask = mongoose.model("DailyTask", dailyTaskSchema);
+const DailyTask = mongoose.model("DailyTask", dailyTaskSchema, "dailyTasks");
 
 export default DailyTask;

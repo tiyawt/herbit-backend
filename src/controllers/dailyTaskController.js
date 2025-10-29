@@ -1,4 +1,4 @@
-import DailyTask from "../models/dailyTask.js";
+import DailyTask from "../models/dailyTasks.js";
 
 // fungsi random deterministik berdasar seed
 function seededRandom(seed) {
