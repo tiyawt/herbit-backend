@@ -9,6 +9,7 @@ import notificationRoutes from "./routes/notificationRoutes.js";
 import gameRoutes from "./routes/gameRoutes.js";
 import dailyTaskRoutes from "./routes/dailyTaskRoutes.js";
 import dailyTaskChecklistRoutes from "./routes/dailyTaskChecklistRoutes.js";
+import treeFruitsRoutes from "./routes/treeFruitsRoutes.js";
 
 
 const app = express();
@@ -34,5 +35,6 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/game", gameRoutes);
 app.use("/api/daily", dailyTaskRoutes);
 app.use("/api/checklists", dailyTaskChecklistRoutes);
+app.use("/api/fruits", treeFruitsRoutes);
 
 export default app;

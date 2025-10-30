@@ -1,4 +1,5 @@
 import DailyTaskChecklist from "../models/dailyTaskChecklist.js";
+import TreeFruit from "../models/treeFruits.js";
 import TreeLeaf from "../models/treeLeaves.js";
 
 
@@ -23,6 +24,20 @@ export const handleChecklistComplete = async (userId, checklistId) => {
     dayNumber: await TreeLeaf.countDocuments({ userId }) + 1,
   });
   await newLeaf.save();
+
+  const totalLeaves = await TreeLeaf.countDocuments({ userId, status: "green" });
+
+    // kalau jumlah daun kelipatan 5 → buat buah baru
+    if (totalLeaves % 5 === 0) {
+    const newFruit = new TreeFruit({
+        userId,
+        treeTrackerId: newLeaf.treeTrackerId, // kalau kamu punya trackerId, isi di sini
+        harvestReadyDate: new Date(),
+    });
+    await newFruit.save();
+    console.log(`🍎 Buah baru muncul untuk user ${userId} (total daun: ${totalLeaves})`);
+    }
+
   return newLeaf;
 };
 
@@ -82,3 +97,23 @@ export const updateYellowLeavesForInactiveUsers = async () => {
     console.error("❌ Gagal update daun kuning:", error);
   }
 };
+
+
+// Hapus daun kalau checklist di-uncheck
+export const handleChecklistUncheck = async (userId, checklistId) => {
+  try {
+    const deletedLeaf = await TreeLeaf.findOneAndDelete({
+      userId,
+      dailyTaskChecklistId: checklistId,
+    });
+
+    if (deletedLeaf) {
+      console.log(`🍂 Daun ${deletedLeaf._id} dihapus karena checklist ${checklistId} di-uncheck`);
+    } else {
+      console.log(`⚠️ Tidak ada daun yang cocok untuk checklist ${checklistId}`);
+    }
+  } catch (error) {
+    console.error("❌ Gagal menghapus daun:", error);
+  }
+};
+
