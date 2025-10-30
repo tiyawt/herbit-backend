@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 
+
 const dailyTaskChecklistSchema = new mongoose.Schema(
   {
     userId: {
@@ -15,6 +16,8 @@ const dailyTaskChecklistSchema = new mongoose.Schema(
     treeLeafId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "TreeLeaf",
+     
+
     },
     isCompleted: {
       type: Boolean,

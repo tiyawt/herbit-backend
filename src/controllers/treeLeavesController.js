@@ -1,0 +1,84 @@
+import DailyTaskChecklist from "../models/dailyTaskChecklist.js";
+import TreeLeaf from "../models/treeLeaves.js";
+
+
+
+export const handleChecklistComplete = async (userId, checklistId) => {
+  // cari daun kuning user
+  const yellowLeaf = await TreeLeaf.findOne({ userId, status: "yellow" });
+
+  if (yellowLeaf) {
+    yellowLeaf.status = "green";
+    yellowLeaf.needRecovery = false;
+    yellowLeaf.statusChangedDate = new Date();
+    await yellowLeaf.save();
+    return yellowLeaf;
+  }
+
+  // kalau gak ada daun kuning, tambahin daun baru
+  const newLeaf = new TreeLeaf({
+    userId,
+    dailyTaskChecklistId: checklistId,
+    status: "green",
+    dayNumber: await TreeLeaf.countDocuments({ userId }) + 1,
+  });
+  await newLeaf.save();
+  return newLeaf;
+};
+
+// Cek siapa yang nggak nyelesain task harian
+export const updateYellowLeavesForInactiveUsers = async () => {
+  const now = new Date();
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+
+  const startOfYesterday = new Date(startOfToday);
+  startOfYesterday.setDate(startOfToday.getDate() - 1);
+
+  try {
+    // Semua user yang punya checklist
+    const allUsers = await DailyTaskChecklist.distinct("userId");
+
+    // User yang minimal menyelesaikan 1 task kemarin
+    const activeUsers = await DailyTaskChecklist.aggregate([
+      {
+        $match: {
+          isCompleted: true,
+          completedAt: { $gte: startOfYesterday, $lt: startOfToday },
+        },
+      },
+      { $group: { _id: "$userId" } },
+    ]);
+
+    const activeUserIds = activeUsers.map(u => u._id.toString());
+    const inactiveUsers = allUsers.filter(u => !activeUserIds.includes(u.toString()));
+
+    // === Inactive users → ubah 1 daun hijau jadi kuning ===
+    for (const userId of inactiveUsers) {
+      const greenLeaf = await TreeLeaf.findOne({ userId, status: "green" }).sort({ createdAt: 1 });
+      if (greenLeaf) {
+        greenLeaf.status = "yellow";
+        greenLeaf.needRecovery = true;
+        greenLeaf.statusChangedDate = new Date();
+        await greenLeaf.save();
+        console.log(`🍂 User ${userId} tidak aktif, daun ${greenLeaf._id} menguning.`);
+      }
+    }
+
+    // === Active users → ubah 1 daun kuning jadi hijau ===
+    for (const userId of activeUserIds) {
+      const yellowLeaf = await TreeLeaf.findOne({ userId, status: "yellow" }).sort({ createdAt: 1 });
+      if (yellowLeaf) {
+        yellowLeaf.status = "green";
+        yellowLeaf.needRecovery = false;
+        yellowLeaf.statusChangedDate = new Date();
+        await yellowLeaf.save();
+        console.log(`🌱 User ${userId} aktif, daun ${yellowLeaf._id} kembali hijau.`);
+      }
+    }
+
+    console.log(`✅ Update selesai. Inactive: ${inactiveUsers.length}, Active: ${activeUserIds.length}`);
+  } catch (error) {
+    console.error("❌ Gagal update daun kuning:", error);
+  }
+};
