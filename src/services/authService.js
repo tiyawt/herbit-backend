@@ -113,6 +113,24 @@ export async function loginUser({ email, password }) {
 }
 
 export async function me(userId) {
-  const user = await User.findById(userId);
-  return user;
+  const user = await User.findById(userId).lean(); 
+  
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  return {
+    id: user._id,
+    email: user.email,
+    username: user.username,
+    phoneNumber: user.phoneNumber,
+    photoUrl: user.photoUrl,
+    prePoints: user.prePoints || 0,
+    totalPoints: user.totalPoints || 0,
+    sortingStreak: user.sortingStreak || 0, 
+    sortingBestStreak: user.sortingBestStreak || 0,
+    sortingLastPlayedBucket: user.sortingLastPlayedBucket,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+  };
 }

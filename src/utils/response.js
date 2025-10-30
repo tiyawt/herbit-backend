@@ -1,5 +1,16 @@
-export const ok = (res, data = {}, message = null, status = 200) =>
-  res.status(status).json({ success: true, data, message });
+// utils/response.js
+export function ok(res, data = null, message = "Success", statusCode = 200) {
+  return res.status(statusCode).json({
+    success: true,
+    message,
+    data,
+  });
+}
 
-export const fail = (res, code = "ERROR", details = null, status = 400) =>
-  res.status(status).json({ success: false, error: { code, details } });
+export function fail(res, code, message, statusCode = 400) {
+  return res.status(statusCode).json({
+    success: false,
+    code,
+    message,
+  });
+}
