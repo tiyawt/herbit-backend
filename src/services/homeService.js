@@ -83,7 +83,6 @@ async function buildHabitsToday(userId) {
     const checklist = checklistMap.get(task._id.toString()) ?? null;
     const done = checklist?.isCompleted ?? false;
     return {
-      id: task._id?.toString() ?? null,
       title: task.title,
       category: task.category,
       done,
@@ -152,7 +151,6 @@ async function buildVoucherBanners() {
     });
     const items = response?.items ?? [];
     return items.map((item) => ({
-      id: item.id,
       name: item.name,
       image: item.bannerUrl ?? item.imageUrl ?? null,
       href: item.landingUrl ?? "#",
