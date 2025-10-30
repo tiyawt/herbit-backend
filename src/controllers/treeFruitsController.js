@@ -1,4 +1,5 @@
 import TreeFruit from "../models/treeFruits.js";
+import TreeTracker from "../models/treeTrackers.js";
 import user from "../models/user.js";
 
 
@@ -31,6 +32,15 @@ export const claimFruit = async (req, res) => {
 
     // tambahkan poin ke user
     await user.findByIdAndUpdate(userId, { $inc: { points: 10 } });
+
+     await TreeTracker.findOneAndUpdate(
+      { userId },
+      {
+        $inc: { totalFruitsHarvested: 1 },
+        lastActivityDate: new Date(),
+      },
+      { new: true }
+    );
 
     res.json({
       message: "Buah berhasil dipanen 🍎 +10 poin!",

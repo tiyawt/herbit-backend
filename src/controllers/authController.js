@@ -1,5 +1,6 @@
 import { ok, fail } from "../utils/response.js";
 import { registerUser, loginUser, me } from "../services/authService.js";
+import { createTreeTrackerForUser } from "./treeTrackersController.js";
 
 const cookieOpts = {
   httpOnly: true,
@@ -13,6 +14,19 @@ export async function register(req, res) {
   try {
     const { email, username, phone_number, password } = req.body;
     const result = await registerUser({ email, username, phone_number, password });
+    
+     // Dapatkan userId dari hasil register
+    const userId = result.user?._id || result._id || result.id;
+
+    // Buat TreeTracker tanpa ganggu flow register
+    if (userId) {
+      try {
+        await createTreeTrackerForUser(userId);
+      } catch (err) {
+        console.warn("Gagal membuat TreeTracker untuk user:", userId, err.message);
+      }
+    }
+    
     return ok(res, { user: result.user ?? result }, "Registered", 201);
 
   } catch (e) {

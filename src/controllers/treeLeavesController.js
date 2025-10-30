@@ -1,6 +1,7 @@
 import DailyTaskChecklist from "../models/dailyTaskChecklist.js";
 import TreeFruit from "../models/treeFruits.js";
 import TreeLeaf from "../models/treeLeaves.js";
+import TreeTracker from "../models/treeTrackers.js";
 
 
 
@@ -24,6 +25,15 @@ export const handleChecklistComplete = async (userId, checklistId) => {
     dayNumber: await TreeLeaf.countDocuments({ userId }) + 1,
   });
   await newLeaf.save();
+
+    await TreeTracker.findOneAndUpdate(
+    { userId },
+    {
+        $inc: { totalGreenLeaves: 1 },
+        lastActivityDate: new Date(),
+    },
+    { new: true, upsert: true }
+    );
 
   const totalLeaves = await TreeLeaf.countDocuments({ userId, status: "green" });
 
@@ -108,6 +118,12 @@ export const handleChecklistUncheck = async (userId, checklistId) => {
     });
 
     if (deletedLeaf) {
+        await TreeTracker.findOneAndUpdate(
+        { userId },
+        { $inc: { totalGreenLeaves: -1 }, lastActivityDate: new Date() },
+        { new: true }
+        );
+
       console.log(`🍂 Daun ${deletedLeaf._id} dihapus karena checklist ${checklistId} di-uncheck`);
     } else {
       console.log(`⚠️ Tidak ada daun yang cocok untuk checklist ${checklistId}`);
