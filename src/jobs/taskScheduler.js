@@ -4,7 +4,7 @@ import { updateYellowLeavesForInactiveUsers } from "../controllers/treeLeavesCon
 // Fungsi untuk register semua cron jobs
 export const initCronJobs = () => {
   // Jalankan setiap jam 00:00
-  cron.schedule("0 0 * * * *", async () => {
+  cron.schedule("0 0 0 * * *", async () => {
     console.log("⏰ Mengecek daun kuning jam 00:00...");
     try {
       await updateYellowLeavesForInactiveUsers();
