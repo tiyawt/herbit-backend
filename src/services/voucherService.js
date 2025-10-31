@@ -1,4 +1,3 @@
-import mongoose from "mongoose";
 import crypto from "crypto";
 import Voucher from "../models/voucher.js";
 import VoucherRedemption from "../models/voucherRedemption.js";
@@ -173,14 +172,18 @@ function mapRedemption(redemption, voucher) {
     voucherId,
     name: source?.name ?? null,
     imageUrl: source?.imageUrl ?? null,
-    image: source?.imageUrl ?? null,
     category: source?.category ?? null,
     pointsDeducted: redemption.pointsDeducted,
-     points: redemption.pointsDeducted,
+    points: redemption.pointsDeducted,
     code: redemption.code,
     status: redemption.status,
     redeemedAt: redemption.redeemedAt,
     expiresAt: redemption.expiresAt,
+    landingUrl: source?.landingUrl ?? null,
+    instructions: Array.isArray(source?.instructions)
+      ? source.instructions
+      : [],
+    terms: Array.isArray(source?.terms) ? source.terms : [],
     notes: redemption.notes,
   };
 }
@@ -276,73 +279,55 @@ function ensureVoucherAvailability(voucher) {
 }
 
 function generateRedemptionCode(voucher) {
-  const prefix = voucher.slug
-    ?.slice(0, 3)
-    ?.replace(/[^a-zA-Z0-9]/g, "")
-    ?.toUpperCase() || "HER";
+  const prefix =
+    voucher.slug
+      ?.slice(0, 3)
+      ?.replace(/[^a-zA-Z0-9]/g, "")
+      ?.toUpperCase() || "HER";
   const suffix = crypto.randomBytes(3).toString("hex").toUpperCase();
   return `${prefix}-${suffix}`;
 }
 
 export async function redeemVoucher({ voucherId, userId }) {
-  const session = await mongoose.startSession();
-  try {
-    session.startTransaction();
+  const voucher = await Voucher.findById(voucherId).exec();
+  ensureVoucherAvailability(voucher);
 
-    const [voucher, user] = await Promise.all([
-      Voucher.findById(voucherId).session(session).exec(),
-      User.findById(userId).session(session).exec(),
-    ]);
+  const user = await User.findById(userId).exec();
+  if (!user) throw new Error("USER_NOT_FOUND");
 
-    ensureVoucherAvailability(voucher);
-    if (!user) throw new Error("USER_NOT_FOUND");
-
-    if ((user.totalPoints ?? 0) < voucher.pointsRequired) {
-      throw new Error("INSUFFICIENT_POINTS");
-    }
-
-    if (typeof voucher.stock === "number") {
-      voucher.stock -= 1;
-    }
-    voucher.redeemedCount += 1;
-
-    user.totalPoints = Math.max(
-      (user.totalPoints ?? 0) - voucher.pointsRequired,
-      0
-    );
-
-    const code = generateRedemptionCode(voucher);
-    const redemptionDoc = await VoucherRedemption.create(
-      [
-        {
-          voucherId: voucher._id,
-          userId: user._id,
-          pointsDeducted: voucher.pointsRequired,
-          code,
-          status: "completed",
-          redeemedAt: new Date(),
-          expiresAt: voucher.validUntil ?? null,
-        },
-      ],
-      { session }
-    );
-
-    await voucher.save({ session });
-    await user.save({ session });
-
-    await session.commitTransaction();
-    const redemption = redemptionDoc[0];
-
-    return mapRedemption(redemption, voucher);
-  } catch (error) {
-    await session.abortTransaction().catch(() => {});
-    throw error;
-  } finally {
-    session.endSession();
+  if ((user.totalPoints ?? 0) < voucher.pointsRequired) {
+    throw new Error("INSUFFICIENT_POINTS");
   }
+
+  if (typeof voucher.stock === "number") {
+    voucher.stock -= 1;
+  }
+  voucher.redeemedCount += 1;
+
+  user.totalPoints = Math.max(
+    (user.totalPoints ?? 0) - voucher.pointsRequired,
+    0
+  );
+
+  await Promise.all([voucher.save(), user.save()]);
+
+  const redemption = await VoucherRedemption.create({
+    voucherId: voucher._id,
+    userId: user._id,
+    pointsDeducted: voucher.pointsRequired,
+    code: generateRedemptionCode(voucher),
+    status: "completed",
+    redeemedAt: new Date(),
+    expiresAt: voucher.validUntil ?? null,
+  });
+
+  return mapRedemption(redemption, voucher);
 }
 
-export async function getUserRedemptions(userId, { limit = 20, page = 1 } = {}) {
+export async function getUserRedemptions(
+  userId,
+  { limit = 20, page = 1 } = {}
+) {
   const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
   const safePage = Math.max(parseInt(page, 10) || 1, 1);
   const skip = (safePage - 1) * safeLimit;
