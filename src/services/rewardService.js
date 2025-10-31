@@ -2,7 +2,15 @@ import mongoose from "mongoose";
 import Reward from "../models/reward.js";
 import MilestoneClaim from "../models/milestoneClaim.js";
 import User from "../models/user.js";
+import DailyTaskChecklist from "../models/dailyTaskChecklist.js";
 import { recordPointsChange } from "./pointsHistoryService.js";
+
+const CASE_INSENSITIVE_COLLATION = { locale: "en", strength: 2 };
+
+function normalizeCode(code) {
+  if (!code) return null;
+  return String(code).trim();
+}
 
 function mapReward(reward) {
   if (!reward) return null;
@@ -14,6 +22,7 @@ function mapReward(reward) {
     pointsReward: reward.pointsReward,
     targetDays: reward.targetDays,
     isActive: reward.isActive,
+    image: reward.image ?? null,
     createdAt: reward.createdAt,
     updatedAt: reward.updatedAt,
   };
@@ -91,28 +100,148 @@ export async function listRewards({
   };
 }
 
-function parseProgress(input, fallback = 0) {
-  if (input === null || input === undefined) return fallback;
-  const value = Number(input);
-  if (Number.isNaN(value) || value < 0) {
-    const error = new Error("INVALID_PROGRESS");
+export async function getReward(rewardId) {
+  const reward = await Reward.findById(rewardId);
+  if (!reward) {
+    const error = new Error("REWARD_NOT_FOUND");
+    error.status = 404;
+    throw error;
+  }
+  return mapReward(reward);
+}
+
+export async function createReward(payload = {}) {
+  const normalizedCode = normalizeCode(payload.code);
+  if (!normalizedCode) {
+    const error = new Error("REWARD_CODE_REQUIRED");
     error.status = 400;
     throw error;
   }
-  return value;
+
+  const exists = await Reward.exists({ code: normalizedCode }).collation(
+    CASE_INSENSITIVE_COLLATION
+  );
+  if (exists) {
+    const error = new Error("REWARD_CODE_EXISTS");
+    error.status = 409;
+    throw error;
+  }
+
+  const reward = new Reward({
+    code: normalizedCode,
+    name: payload.name,
+    description: payload.description,
+    pointsReward: payload.pointsReward,
+    targetDays: payload.targetDays,
+    isActive: payload.isActive,
+    image: payload.image,
+  });
+
+  const saved = await reward.save();
+  return mapReward(saved);
+}
+
+export async function updateReward(rewardId, updates = {}) {
+  const reward = await Reward.findById(rewardId);
+  if (!reward) {
+    const error = new Error("REWARD_NOT_FOUND");
+    error.status = 404;
+    throw error;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, "code")) {
+    const normalizedCode = normalizeCode(updates.code);
+    if (!normalizedCode) {
+      const error = new Error("REWARD_CODE_REQUIRED");
+      error.status = 400;
+      throw error;
+    }
+    if (normalizedCode !== reward.code) {
+      const exists = await Reward.exists({
+        code: normalizedCode,
+        _id: { $ne: rewardId },
+      }).collation(CASE_INSENSITIVE_COLLATION);
+      if (exists) {
+        const error = new Error("REWARD_CODE_EXISTS");
+        error.status = 409;
+        throw error;
+      }
+      reward.code = normalizedCode;
+    }
+  }
+
+  const fields = [
+    "name",
+    "description",
+    "pointsReward",
+    "targetDays",
+    "isActive",
+    "image",
+  ];
+
+  fields.forEach((field) => {
+    if (Object.prototype.hasOwnProperty.call(updates, field)) {
+      reward[field] = updates[field];
+    }
+  });
+
+  const saved = await reward.save();
+  return mapReward(saved);
+}
+
+export async function deleteReward(rewardId) {
+  const removed = await Reward.findByIdAndDelete(rewardId);
+  if (!removed) {
+    const error = new Error("REWARD_NOT_FOUND");
+    error.status = 404;
+    throw error;
+  }
+  return { id: removed._id?.toString() ?? null };
+}
+
+function computeStreakDays(timestamps = []) {
+  if (!timestamps.length) return 0;
+  const daySet = new Set();
+  timestamps.forEach((ts) => {
+    if (!ts) return;
+    const date = new Date(ts);
+    if (Number.isNaN(date.getTime())) return;
+    date.setHours(0, 0, 0, 0);
+    daySet.add(date.getTime());
+  });
+  if (!daySet.size) return 0;
+  const ONE_DAY = 24 * 60 * 60 * 1000;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  let streak = 0;
+  let cursor = today.getTime();
+  while (daySet.has(cursor)) {
+    streak += 1;
+    cursor -= ONE_DAY;
+  }
+  return streak;
 }
 
 export async function claimRewardMilestone({
   userId,
   rewardCode,
-  progressDays = null,
 }) {
+  const normalizedCode = normalizeCode(rewardCode);
+  if (!normalizedCode) {
+    const error = new Error("REWARD_CODE_REQUIRED");
+    error.status = 400;
+    throw error;
+  }
+
   const session = await mongoose.startSession();
   try {
     session.startTransaction();
 
     const [reward, user] = await Promise.all([
-      Reward.findOne({ code: rewardCode }).session(session).exec(),
+      Reward.findOne({ code: normalizedCode })
+        .collation(CASE_INSENSITIVE_COLLATION)
+        .session(session)
+        .exec(),
       User.findById(userId).session(session).exec(),
     ]);
 
@@ -139,8 +268,34 @@ export async function claimRewardMilestone({
       .session(session)
       .exec();
 
-    const baselineProgress = existingClaim?.progressDays ?? 0;
-    const nextProgress = Math.max(parseProgress(progressDays, baselineProgress), baselineProgress);
+    if ((existingClaim?.pointsAwarded ?? 0) > 0) {
+      const error = new Error("REWARD_ALREADY_CLAIMED");
+      error.status = 409;
+      throw error;
+    }
+
+    const checklistDocs = await DailyTaskChecklist.find({
+      userId,
+      isCompleted: true,
+    })
+      .session(session)
+      .select({ completedAt: 1, updatedAt: 1, createdAt: 1 })
+      .sort({ completedAt: -1, updatedAt: -1, createdAt: -1 })
+      .limit(120)
+      .lean();
+
+    const timestamps = checklistDocs.map(
+      (item) =>
+        item.completedAt ?? item.updatedAt ?? item.createdAt ?? null
+    );
+    const streakDays = computeStreakDays(timestamps);
+
+    if (streakDays < reward.targetDays) {
+      const error = new Error("REWARD_PROGRESS_INSUFFICIENT");
+      error.status = 409;
+      throw error;
+    }
+
     let claim = existingClaim;
     let claimChanged = false;
 
@@ -151,18 +306,23 @@ export async function claimRewardMilestone({
             userId,
             rewardId: reward._id,
             code: reward.code,
-            progressDays: nextProgress,
+            progressDays: streakDays,
+            status: "completed",
           },
         ],
         { session }
       );
       claim = docs[0];
-    } else if (nextProgress !== claim.progressDays) {
-      claim.progressDays = nextProgress;
+    } else {
+      if (claim.progressDays !== streakDays) {
+        claim.progressDays = streakDays;
+        claimChanged = true;
+      }
+      claim.status = "completed";
       claimChanged = true;
     }
 
-    const meetsTarget = nextProgress >= reward.targetDays;
+    const meetsTarget = streakDays >= reward.targetDays;
     let awardedNow = 0;
     let userChanged = false;
 
@@ -235,4 +395,42 @@ export async function getUserMilestoneClaims(
     },
     items: items.map((claim) => mapMilestoneClaim(claim, claim.rewardId)),
   };
+}
+
+export async function updateMilestoneProgress({
+  userId,
+  rewardCode,
+  progressDays,
+}) {
+  const normalizedCode = normalizeCode(rewardCode);
+  if (!normalizedCode) {
+    const error = new Error("REWARD_CODE_REQUIRED");
+    error.status = 400;
+    throw error;
+  }
+
+  const reward = await Reward.findOne({ code: normalizedCode })
+    .collation(CASE_INSENSITIVE_COLLATION)
+    .lean();
+  if (!reward) {
+    const error = new Error("REWARD_NOT_FOUND");
+    error.status = 404;
+    throw error;
+  }
+
+  const safeProgress = Math.max(Number(progressDays) || 0, 0);
+  const claim = await MilestoneClaim.findOneAndUpdate(
+    { userId, rewardId: reward._id },
+    {
+      $set: {
+        code: reward.code,
+        progressDays: safeProgress,
+        status: safeProgress >= reward.targetDays ? "completed" : "pending",
+      },
+      $unset: { pointsAwarded: "" },
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  ).lean();
+
+  return mapMilestoneClaim(claim, reward);
 }
