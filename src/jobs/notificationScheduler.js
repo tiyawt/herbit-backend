@@ -25,7 +25,7 @@ export function initNotificationSchedulers() {
 
   // 1️⃣ Daily Task — tiap hari 06:00 WIB
   cron.schedule(
-    "35 8 * * *",
+    "0 6 * * *",
     async () => {
       console.log(
         "🕒 DailyTask cron:",
@@ -50,7 +50,7 @@ export function initNotificationSchedulers() {
 
   // 2️⃣ Ecoenzym — tiap hari 08:00 WIB
   cron.schedule(
-    "47 8 * * *",
+    "0 8 * * *",
     async () => {
       console.log( 
         "🕒 Ecoenzym cron:",
@@ -113,7 +113,7 @@ export function initNotificationSchedulers() {
 
   // 3️⃣ Voucher — H-1 sebelum expired (09:00 WIB)
   cron.schedule(
-    "48 8 * * *",
+    "0 9 * * *",
     async () => {
       const target = tomorrowDateStrWIB();
       console.log("🕒 Voucher cron (WIB target):", target);
@@ -168,7 +168,7 @@ export function initNotificationSchedulers() {
 
   // Game Sorting — tiap hari 10:00 WIB
   cron.schedule(
-    "38 8 * * *",
+    "0 10 * * *",
     async () => {
       const bucket = todayBucketWIB();
       console.log("🕒 GameSorting notif cron (bucket WIB):", bucket);

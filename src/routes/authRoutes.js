@@ -2,7 +2,7 @@ import { Router } from "express";
 import passport from "passport";
 import jwt from "jsonwebtoken";
 
-import { register, login, getMe } from "../controllers/authController.js";
+import { register, login, getMe, logout } from "../controllers/authController.js";
 import {
   forgotPassword,
   resetPassword,
@@ -21,6 +21,9 @@ router.post(
 );
 router.post("/login", requireBody(["email", "password"]), login);
 router.get("/me", authRequired, getMe);
+
+// logout 
+router.post("/logout", logout);
 
 // Forgot/Reset Password
 router.post("/forgot-password", requireBody(["email"]), forgotPassword);
