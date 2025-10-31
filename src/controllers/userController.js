@@ -1,6 +1,9 @@
 import User from "../models/user.js";
 import { getUserPointsHistory } from "../services/pointsHistoryService.js";
-import { getUserMilestoneClaims } from "../services/rewardService.js";
+import {
+  getUserMilestoneClaims,
+  updateMilestoneProgress,
+} from "../services/rewardService.js";
 import { getUserProfileSummary } from "../services/profileService.js";
 import { getHomeSummary } from "../services/homeService.js";
 
@@ -94,16 +97,30 @@ export async function getUserMilestonesHandler(req, res) {
 
 export async function getUserProfileSummaryHandler(req, res) {
   try {
-    const { username } = req.params;
-    if (!username) {
-      return fail(res, "USERNAME_REQUIRED", "Username wajib diisi", 400);
+    const authUserId = req.user?.id;
+    if (!authUserId) {
+      return fail(res, "UNAUTHORIZED", "User harus login", 401);
     }
 
-    const summary = await getUserProfileSummary(username);
+    const user = await User.findById(authUserId)
+      .select({ username: 1 })
+      .lean();
+    if (!user?.username) {
+      return fail(res, "USER_NOT_FOUND", "Pengguna tidak ditemukan", 404);
+    }
+
+    const summary = await getUserProfileSummary(user.username);
     return ok(res, summary);
   } catch (error) {
     const status =
-      error.message === "USER_NOT_FOUND" ? 404 : error.status ?? 500;
+      error.message === "USER_NOT_FOUND"
+        ? 404
+        : error.status ??
+          (error.message === "UNAUTHORIZED"
+            ? 401
+            : error.message === "FORBIDDEN"
+              ? 403
+              : 500);
     return fail(
       res,
       "USER_PROFILE_SUMMARY_FAILED",
@@ -208,5 +225,54 @@ export async function getHomeSummaryHandler(req, res) {
     const status =
       error.message === "USER_NOT_FOUND" ? 404 : error.status ?? 500;
     return fail(res, "HOME_SUMMARY_FAILED", error.message ?? error, status);
+  }
+}
+
+export async function updateUserMilestoneProgressHandler(req, res) {
+  try {
+    const { username, rewardCode } = req.params;
+    const { progressDays = null } = req.body ?? {};
+
+    if (!username) {
+      return fail(res, "USERNAME_REQUIRED", "Username wajib diisi", 400);
+    }
+    if (!rewardCode) {
+      return fail(res, "REWARD_CODE_REQUIRED", "Kode reward wajib diisi", 400);
+    }
+    if (progressDays === null || Number.isNaN(Number(progressDays))) {
+      return fail(
+        res,
+        "PROGRESS_REQUIRED",
+        "progressDays wajib diisi sebagai angka",
+        400
+      );
+    }
+
+    const user = await User.findOne({ username }).select({ _id: 1 }).lean();
+    if (!user?._id) {
+      return fail(res, "USER_NOT_FOUND", "Pengguna tidak ditemukan", 404);
+    }
+
+    const result = await updateMilestoneProgress({
+      userId: user._id,
+      rewardCode,
+      progressDays: Number(progressDays),
+    });
+
+    return ok(
+      res,
+      result,
+      "Progress reward berhasil diperbarui (endpoint sementara)"
+    );
+  } catch (error) {
+    const status =
+      error.status ??
+      (error.message === "REWARD_NOT_FOUND" ? 404 : 400);
+    return fail(
+      res,
+      "UPDATE_MILESTONE_PROGRESS_FAILED",
+      error.message ?? error,
+      status
+    );
   }
 }
