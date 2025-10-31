@@ -10,7 +10,8 @@ import gameRoutes from "./routes/gameRoutes.js";
 import dailyTaskRoutes from "./routes/dailyTaskRoutes.js";
 import dailyTaskChecklistRoutes from "./routes/dailyTaskChecklistRoutes.js";
 import treeFruitsRoutes from "./routes/treeFruitsRoutes.js";
-import treeTackerRoutes from "./routes/treeTrackersRoutes.js";
+import treeTrackerRoutes from "./routes/treeTrackersRoutes.js";
+import treeLeavesRoutes from "./routes/treeLeavesRoutes.js";
 import ecoenzimRoutes from "./routes/ecoenzimRoutes.js";
 import cron from "node-cron";
 import { autoCancelExpiredProjects } from "./controllers/ecoenzimController.js";
@@ -40,7 +41,8 @@ app.use("/api/game", gameRoutes);
 app.use("/api/daily", dailyTaskRoutes);
 app.use("/api/checklists", dailyTaskChecklistRoutes);
 app.use("/api/fruits", treeFruitsRoutes);
-app.use("/api/tree", treeTackerRoutes)
+app.use("/api/tree", treeTrackerRoutes);
+app.use("/api/leaves", treeLeavesRoutes);
 app.use("/api/ecoenzim", ecoenzimRoutes);
 
 

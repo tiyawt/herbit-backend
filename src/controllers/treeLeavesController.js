@@ -147,3 +147,12 @@ export const handleChecklistUncheck = async (userId, checklistId) => {
   }
 };
 
+export const getAvailableLeaves = async (req, res) => {
+  try {
+    const userId = req.userId || req.user.id;
+    const leaves = await TreeLeaf.find({ userId });
+    res.json({ leaves });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
