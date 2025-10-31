@@ -1,4 +1,3 @@
-import mongoose from "mongoose";
 import Reward from "../models/reward.js";
 import MilestoneClaim from "../models/milestoneClaim.js";
 import User from "../models/user.js";
@@ -233,142 +232,113 @@ export async function claimRewardMilestone({
     throw error;
   }
 
-  const session = await mongoose.startSession();
-  try {
-    session.startTransaction();
+  const reward = await Reward.findOne({ code: normalizedCode })
+    .collation(CASE_INSENSITIVE_COLLATION)
+    .exec();
+  if (!reward) {
+    const error = new Error("REWARD_NOT_FOUND");
+    error.status = 404;
+    throw error;
+  }
+  if (!reward.isActive) {
+    const error = new Error("REWARD_INACTIVE");
+    error.status = 400;
+    throw error;
+  }
 
-    const [reward, user] = await Promise.all([
-      Reward.findOne({ code: normalizedCode })
-        .collation(CASE_INSENSITIVE_COLLATION)
-        .session(session)
-        .exec(),
-      User.findById(userId).session(session).exec(),
-    ]);
+  const user = await User.findById(userId).exec();
+  if (!user) {
+    const error = new Error("USER_NOT_FOUND");
+    error.status = 404;
+    throw error;
+  }
 
-    if (!reward) {
-      const error = new Error("REWARD_NOT_FOUND");
-      error.status = 404;
-      throw error;
-    }
-    if (!reward.isActive) {
-      const error = new Error("REWARD_INACTIVE");
-      error.status = 400;
-      throw error;
-    }
-    if (!user) {
-      const error = new Error("USER_NOT_FOUND");
-      error.status = 404;
-      throw error;
-    }
+  const existingClaim = await MilestoneClaim.findOne({
+    userId,
+    rewardId: reward._id,
+  }).exec();
 
-    const existingClaim = await MilestoneClaim.findOne({
+  if ((existingClaim?.pointsAwarded ?? 0) > 0) {
+    const error = new Error("REWARD_ALREADY_CLAIMED");
+    error.status = 409;
+    throw error;
+  }
+
+  const checklistDocs = await DailyTaskChecklist.find({
+    userId,
+    isCompleted: true,
+  })
+    .select({ completedAt: 1, updatedAt: 1, createdAt: 1 })
+    .sort({ completedAt: -1, updatedAt: -1, createdAt: -1 })
+    .limit(120)
+    .lean();
+
+  const timestamps = checklistDocs.map(
+    (item) =>
+      item.completedAt ?? item.updatedAt ?? item.createdAt ?? null
+  );
+  const streakDays = computeStreakDays(timestamps);
+
+  if (streakDays < reward.targetDays) {
+    const error = new Error("REWARD_PROGRESS_INSUFFICIENT");
+    error.status = 409;
+    throw error;
+  }
+
+  let claim = existingClaim;
+  let claimChanged = false;
+
+  if (!claim) {
+    claim = await MilestoneClaim.create({
       userId,
       rewardId: reward._id,
-    })
-      .session(session)
-      .exec();
-
-    if ((existingClaim?.pointsAwarded ?? 0) > 0) {
-      const error = new Error("REWARD_ALREADY_CLAIMED");
-      error.status = 409;
-      throw error;
+      code: reward.code,
+      progressDays: streakDays,
+      status: "completed",
+    });
+  } else {
+    if (claim.progressDays !== streakDays) {
+      claim.progressDays = streakDays;
+      claimChanged = true;
     }
-
-    const checklistDocs = await DailyTaskChecklist.find({
-      userId,
-      isCompleted: true,
-    })
-      .session(session)
-      .select({ completedAt: 1, updatedAt: 1, createdAt: 1 })
-      .sort({ completedAt: -1, updatedAt: -1, createdAt: -1 })
-      .limit(120)
-      .lean();
-
-    const timestamps = checklistDocs.map(
-      (item) =>
-        item.completedAt ?? item.updatedAt ?? item.createdAt ?? null
-    );
-    const streakDays = computeStreakDays(timestamps);
-
-    if (streakDays < reward.targetDays) {
-      const error = new Error("REWARD_PROGRESS_INSUFFICIENT");
-      error.status = 409;
-      throw error;
-    }
-
-    let claim = existingClaim;
-    let claimChanged = false;
-
-    if (!claim) {
-      const docs = await MilestoneClaim.create(
-        [
-          {
-            userId,
-            rewardId: reward._id,
-            code: reward.code,
-            progressDays: streakDays,
-            status: "completed",
-          },
-        ],
-        { session }
-      );
-      claim = docs[0];
-    } else {
-      if (claim.progressDays !== streakDays) {
-        claim.progressDays = streakDays;
-        claimChanged = true;
-      }
+    if (claim.status !== "completed") {
       claim.status = "completed";
       claimChanged = true;
     }
-
-    const meetsTarget = streakDays >= reward.targetDays;
-    let awardedNow = 0;
-    let userChanged = false;
-
-    if (meetsTarget && (claim.pointsAwarded ?? 0) === 0) {
-      claim.pointsAwarded = reward.pointsReward;
-      claim.status = "completed";
-      claim.claimedAt = new Date();
-      claimChanged = true;
-
-      user.totalPoints = (user.totalPoints ?? 0) + reward.pointsReward;
-      userChanged = true;
-
-      await recordPointsChange(
-        {
-          userId: user._id,
-          pointsAmount: reward.pointsReward,
-          source: "reward",
-          referenceId: reward.code,
-          createdAt: claim.claimedAt,
-        },
-        { session }
-      );
-
-      awardedNow = reward.pointsReward;
-    }
-
-    if (claimChanged) {
-      await claim.save({ session });
-    }
-    if (userChanged) {
-      await user.save({ session });
-    }
-
-    await session.commitTransaction();
-
-    return {
-      reward: mapReward(reward),
-      claim: mapMilestoneClaim(claim, reward),
-      pointsAwarded: awardedNow,
-    };
-  } catch (error) {
-    await session.abortTransaction().catch(() => {});
-    throw error;
-  } finally {
-    session.endSession();
   }
+
+  const meetsTarget = streakDays >= reward.targetDays;
+  let awardedNow = 0;
+
+  if (meetsTarget && (claim.pointsAwarded ?? 0) === 0) {
+    claim.pointsAwarded = reward.pointsReward;
+    claim.status = "completed";
+    claim.claimedAt = new Date();
+    claimChanged = true;
+
+    user.totalPoints = (user.totalPoints ?? 0) + reward.pointsReward;
+    await user.save();
+
+    await recordPointsChange({
+      userId: user._id,
+      pointsAmount: reward.pointsReward,
+      source: "reward",
+      referenceId: reward.code,
+      createdAt: claim.claimedAt,
+    });
+
+    awardedNow = reward.pointsReward;
+  }
+
+  if (claimChanged && claim.save) {
+    await claim.save();
+  }
+
+  return {
+    reward: mapReward(reward),
+    claim: mapMilestoneClaim(claim, reward),
+    pointsAwarded: awardedNow,
+  };
 }
 
 export async function getUserMilestoneClaims(
