@@ -31,7 +31,7 @@ export const claimFruit = async (req, res) => {
     await fruit.save();
 
     // tambahkan poin ke user
-    await user.findByIdAndUpdate(userId, { $inc: { points: 10 } });
+    await user.findByIdAndUpdate(userId, { $inc: { totalPoints: 10 } });
 
      await TreeTracker.findOneAndUpdate(
       { userId },
