@@ -6,24 +6,20 @@ import {
   pushDailyTaskNotif,
   pushEcoenzymProgressNotif,
   pushVoucherExpiring,
+  pushGameSortingInvite,
 } from "../services/notificationService.js";
-import { daysBetween, todayBucketWIB } from "../utils/date.js";
-import { pushGameSortingInvite } from "../services/notificationService.js";
-
-
-const EcoenzymProjects = () =>
-  mongoose.connection.collection("ecoenzymProjects");
-const VoucherRedemptions = () =>
-  mongoose.connection.collection("voucherRedemptions");
-const GameSortings = () => mongoose.connection.collection("gameSortings");
+import {
+  daysBetween,
+  todayBucketWIB,
+  startEndOfWIBDayUTC,
+} from "../utils/date.js";
+import EcoenzimProject from "../models/ecoenzimProject.js";
+import VoucherRedemption from "../models/voucherReedemption.js";
+import GameSorting from "../models/gameSorting.js";
+import notification from "../models/notification.js";
 
 export function initNotificationSchedulers() {
-  if (mongoose.connection.readyState !== 1) {
-    console.warn("⚠️ Mongo belum connected, scheduler belum di-init.");
-    return;
-  }
-
-  // 1️⃣ Daily Task — tiap hari 06:00 WIB
+  // Daily Task — tiap hari 06:00 WIB
   cron.schedule(
     "0 6 * * *",
     async () => {
@@ -48,52 +44,70 @@ export function initNotificationSchedulers() {
     { timezone: "Asia/Jakarta" }
   );
 
-  // 2️⃣ Ecoenzym — tiap hari 08:00 WIB
+  // Ecoenzym — tiap hari 08:00 WIB
   cron.schedule(
     "0 8 * * *",
     async () => {
-      console.log( 
+      console.log(
         "🕒 Ecoenzym cron:",
         new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })
       );
 
-      const today = new Date();
-      const projects = EcoenzymProjects().find(
+      const projects = await EcoenzimProject.find(
         { status: { $in: ["ongoing", "active"] } },
-        {
-          projection: {
-            _id: 1,
-            userId: 1,
-            startDate: 1,
-            endDate: 1,
-            status: 1,
-          },
+        "_id userId startDate endDate status"
+      ).lean();
+
+      const today = new Date();
+      const milestones = [7, 14, 21, 30, 35, 42, 49, 56, 60, 70, 77, 84, 90];
+
+      let created = 0,
+        skipped = 0;
+
+      for (const p of projects) {
+        if (!p.startDate) {
+          skipped++;
+          continue;
         }
-      );
+        if (p.endDate && today > new Date(p.endDate)) {
+          skipped++;
+          continue;
+        }
 
-      let count = 0;
-      for await (const p of projects) {
-        if (!p.startDate) continue;
-        if (p.endDate && today > new Date(p.endDate)) continue;
+        const dayNumber = daysBetween(new Date(p.startDate), today) + 1;
 
-        const d = daysBetween(new Date(p.startDate), today);
-        const milestones = [7, 14, 21, 30, 35, 42, 49, 56, 60, 70, 77, 84, 90];
-        if (!milestones.includes(d)) continue;
+        if (!milestones.includes(dayNumber)) {
+          skipped++;
+          continue;
+        }
+
+        let userIdObj = null;
+        try {
+          userIdObj = mongoose.Types.ObjectId.createFromHexString(p.userId);
+        } catch {
+          console.error("❌ ecoenzym userId bukan ObjectId hex:", p.userId);
+          skipped++;
+          continue;
+        }
 
         try {
-          await pushEcoenzymProgressNotif(p.userId, p._id, d);
-          count++;
+          await pushEcoenzymProgressNotif(userIdObj, p._id, dayNumber);
+          created++;
         } catch (e) {
-          if (e.code !== 11000) console.error("❌ pushEcoenzym:", e);
+          if (e.code === 11000) {
+          } else {
+            console.error("❌ pushEcoenzym:", e);
+          }
         }
       }
 
-      console.log(`✅ Ecoenzym notifications checked (created=${count})`);
+      console.log(
+        `✅ Ecoenzym notifications checked (created=${created}, skipped=${skipped})`
+      );
     },
     { timezone: "Asia/Jakarta" }
   );
 
-  
   function tomorrowDateStrWIB() {
     const fmt = new Intl.DateTimeFormat("sv-SE", {
       timeZone: "Asia/Jakarta",
@@ -111,51 +125,29 @@ export function initNotificationSchedulers() {
     return `${y2}-${m2}-${d2}`;
   }
 
-  // 3️⃣ Voucher — H-1 sebelum expired (09:00 WIB)
+  // Voucher — H-1 sebelum expired (12:00 WIB)
   cron.schedule(
-    "0 9 * * *",
+    "0 12 * * *",
     async () => {
-      const target = tomorrowDateStrWIB();
+      const target = tomorrowDateStrWIB(); // "YYYY-MM-DD" besok (WIB)
       console.log("🕒 Voucher cron (WIB target):", target);
 
-      // Mencari redemption yang expiresAt jatuh di BESOK (WIB) pakai $expr
-      const cur = VoucherRedemptions().find(
-        {
-          $expr: {
-            $eq: [
-              {
-                $dateToString: {
-                  format: "%Y-%m-%d",
-                  date: "$expiresAt",
-                  timezone: "Asia/Jakarta",
-                },
-              },
-              target,
-            ],
-          },
-        },
-        { projection: { _id: 1, userId: 1, voucherId: 1, expiresAt: 1 } }
-      );
+      const { startUTC, endUTC } = startEndOfWIBDayUTC(target);
 
-      let created = 0,
-        seen = 0;
-      for await (const r of cur) {
-        seen++;
+      const cur = await VoucherRedemption.find(
+        { expiresAt: { $gte: startUTC, $lte: endUTC } },
+        "_id userId voucherId expiresAt"
+      ).lean();
+
+      let created = 0;
+      for (const r of cur) {
         try {
           await pushVoucherExpiring(r.userId, r.voucherId || r._id);
           created++;
         } catch (e) {
-          if (e.code === 11000) {
-            console.log("⚠️ duplicate skipped", {
-              userId: r.userId?.toString?.(),
-              ref: (r.voucherId || r._id)?.toString?.(),
-            });
-          } else {
-            console.error("❌ pushVoucher:", e);
-          }
+          if (e.code !== 11000) console.error("❌ pushVoucher:", e);
         }
       }
-
 
       console.log(
         `✅ Voucher expiry notifications checked (created=${created})`
@@ -171,38 +163,44 @@ export function initNotificationSchedulers() {
     "0 10 * * *",
     async () => {
       const bucket = todayBucketWIB();
-      console.log("🕒 GameSorting notif cron (bucket WIB):", bucket);
+      console.log("🕒 GameReminder @12:00 WIB bucket:", bucket);
 
-      const completers = await GameSortings().distinct("userId", {
+      const completedUserIds = await GameSorting.distinct("userId", {
         dayBucket: bucket,
         isCompleted: true,
       });
-      const completedSet = new Set(
-        completers.map((x) => x.toString?.() ?? String(x))
-      );
+      const alreadyNotifiedUserIds = await notification.distinct("userId", {
+        type: "game_sorting",
+        dayBucket: bucket,
+      });
+
+      const exclude = new Set([
+        ...completedUserIds.map(String),
+        ...alreadyNotifiedUserIds.map(String),
+      ]);
 
       const users = await User.find({}, "_id");
       let created = 0,
         skipped = 0;
 
       for (const u of users) {
-        const uid = u._id.toString();
-        if (completedSet.has(uid)) {
+        if (exclude.has(u._id.toString())) {
           skipped++;
           continue;
         }
 
         try {
-          const res = await pushGameSortingInvite(u._id, new Date());
-          if (res) created++;
+          await pushGameSortingInvite(u._id, new Date());
+          created++;
         } catch (e) {
-          if (e.code === 11000) skipped++;
-          else console.error("❌ pushGameSortingInvite:", e);
+          if (e.code === 11000) {
+            /* dupe → aman */ skipped++;
+          } else console.error("❌ pushGameDailyReminder:", e);
         }
       }
 
       console.log(
-        `✅ GameSorting invites done (created=${created}, skipped=${skipped})`
+        `✅ Game reminders sent (created=${created}, skipped=${skipped})`
       );
     },
     { timezone: "Asia/Jakarta" }

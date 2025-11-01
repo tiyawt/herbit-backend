@@ -2,7 +2,6 @@
 import notification from "../models/notification.js";
 import { todayBucketWIB } from "../utils/date.js";
 
-
 const TITLES = {
   daily_task: "Daily Challenge Hari Ini",
   ecoenzym_project: "Pengingat Progres Ecoenzym",
@@ -69,7 +68,8 @@ export async function pushEcoenzymProgressNotif(userId, projectId, dayNumber) {
     },
     60: {
       title: "Upload foto progress bulan keduamu!",
-      message: "Hampir tak ada gas keluar. Warna jernih, endapan halus. Saatnya upload foto progres bulan kedua agar fermentasimu tercatat!",
+      message:
+        "Hampir tak ada gas keluar. Warna jernih, endapan halus. Saatnya upload foto progres bulan kedua agar fermentasimu tercatat!",
     },
     70: {
       title: "Masa Tenang",
@@ -85,7 +85,8 @@ export async function pushEcoenzymProgressNotif(userId, projectId, dayNumber) {
     },
     90: {
       title: "Panen Ecoenzym!",
-      message: "Fermentasi selesai 🎉 Cairan coklat keemasan siap digunakan. Kamu bisa claim pointmu sekarang!",
+      message:
+        "Fermentasi selesai 🎉 Cairan coklat keemasan siap digunakan. Kamu bisa claim pointmu sekarang!",
     },
   };
 
@@ -161,4 +162,9 @@ export async function markAllRead(userId, type) {
   if (type) q.type = type;
   await notification.updateMany(q, { $set: { isRead: true } });
   return { ok: true };
+}
+
+export async function clearAllNotifications(userId) {
+  const result = await notification.deleteMany({ user_id: userId });
+  return result;
 }
