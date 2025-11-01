@@ -9,6 +9,7 @@ export async function registerUser({
   username,
   phone_number,
   password,
+  role = "user",
 }) {
   const taken = await User.findOne({ $or: [{ email }, { username }] });
   if (taken) throw new Error("EMAIL_OR_USERNAME_TAKEN");
@@ -20,7 +21,7 @@ export async function registerUser({
     session = await mongoose.startSession();
     session.startTransaction();
     const [user] = await User.create(
-      [{ email, username, phoneNumber: phone_number ?? null }],
+      [{ email, username, phoneNumber: phone_number ?? null, role }],
       { session }
     );
     await AuthCredential.create(
@@ -96,7 +97,7 @@ export async function loginUser({ email, password }) {
   if (!ok) throw new Error("INVALID_CREDENTIALS");
 
   const token = jwt.sign(
-    { id: user._id, role: "user" },
+    { id: user._id, role: user.role },
     process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
   );
@@ -108,6 +109,7 @@ export async function loginUser({ email, password }) {
       email: user.email,
       username: user.username,
       photoUrl: user.photoUrl,
+      role: user.role,
     },
   };
 }
@@ -125,6 +127,7 @@ export async function me(userId) {
     username: user.username,
     phoneNumber: user.phoneNumber,
     photoUrl: user.photoUrl,
+    role: user.role,
     prePoints: user.prePoints || 0,
     totalPoints: user.totalPoints || 0,
     sortingStreak: user.sortingStreak || 0, 
