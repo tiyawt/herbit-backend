@@ -5,6 +5,8 @@ import voucherRoutes from "./voucherRoutes.js";
 import voucherAdminRoutes from "./voucherAdminRoutes.js";
 import rewardRoutes from "./rewardRoutes.js";
 import rewardAdminRoutes from "./rewardAdminRoutes.js";
+import treeRoutes from "./treeRoutes.js";
+import dailyTaskRoutes from "./dailyTaskRoutes.js";
 import gameRoutes from "./gameRoutes.js";
 import notificationRoutes from "./notificationRoutes.js";
 import userRoutes from "./userRoutes.js";
@@ -28,6 +30,8 @@ router.use("/admin/rewards", rewardAdminRoutes);
 router.use("/admin/milestone-claims", milestoneClaimAdminRoutes);
 router.use("/admin/points-history", pointsHistoryAdminRoutes);
 
+router.use("/trees", treeRoutes);
+router.use("/daily-tasks", dailyTaskRoutes);
 router.use("/games", gameRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/users", userRoutes);
