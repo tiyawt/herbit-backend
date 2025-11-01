@@ -14,7 +14,7 @@ import {
   startEndOfWIBDayUTC,
 } from "../utils/date.js";
 import EcoenzimProject from "../models/ecoenzimProject.js";
-import VoucherRedemption from "../models/voucherReedemption.js";
+import VoucherRedemption from "../models/voucherRedemption.js";
 import GameSorting from "../models/gameSorting.js";
 import notification from "../models/notification.js";
 

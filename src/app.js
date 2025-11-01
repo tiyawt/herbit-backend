@@ -10,6 +10,7 @@ import gameRoutes from "./routes/gameRoutes.js";
 import ecoenzimRoutes from "./routes/ecoenzimRoutes.js";
 import cron from "node-cron";
 import { autoCancelExpiredProjects } from "./controllers/ecoenzimController.js";
+import "./jobs/sortingStreakReset.js";
 
 
 const app = express();
