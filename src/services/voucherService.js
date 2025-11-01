@@ -2,6 +2,7 @@ import crypto from "crypto";
 import Voucher from "../models/voucher.js";
 import VoucherRedemption from "../models/voucherRedemption.js";
 import User from "../models/user.js";
+import { recordPointsChange } from "./pointsHistoryService.js";
 
 function createError(message, status) {
   const error = new Error(message);
@@ -491,6 +492,14 @@ export async function redeemVoucher({ voucherId, userId, note = null }) {
   });
 
   await redemption.populate("userId", "_id username email");
+
+  await recordPointsChange({
+    userId: user._id,
+    pointsAmount: -voucher.pointsRequired,
+    source: "voucher",
+    referenceId: redemption._id?.toString() ?? null,
+    createdAt: redemption.redeemedAt ?? new Date(),
+  });
 
   return mapRedemption(redemption, voucher);
 }
