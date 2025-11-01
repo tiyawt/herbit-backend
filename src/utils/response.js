@@ -1,9 +1,9 @@
 // utils/response.js
-export function ok(res, data = null, message = "Success", statusCode = 200) {
-  return res.status(statusCode).json({
+export function ok(res, data, message = "Success", status = 200) {
+  return res.status(status).json({
     success: true,
+    data: data,
     message,
-    data,
   });
 }
 

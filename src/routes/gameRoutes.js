@@ -6,6 +6,7 @@ import {
   completeGameSession,
   claimGameReward,
 } from "../services/gameSortingService.js";
+import gameSortingReward from "../models/gameSortingReward.js";
 
 const router = Router();
 
@@ -37,6 +38,26 @@ router.post("/claim/:id", authRequired, async (req, res, next) => {
       req.user.id
     );
     res.json({ ok: true, alreadyClaimed, reward, user });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get("/reward-status/:bucket", authRequired, async (req, res, next) => {
+  try {
+    const { bucket } = req.params;
+    const userId = req.user.id;
+
+    const reward = await gameSortingReward.findOne({
+      userId,
+      dayBucket: bucket,
+    });
+
+    res.json({
+      ok: true,
+      alreadyClaimed: !!reward,
+      reward: reward || null,
+    });
   } catch (e) {
     next(e);
   }

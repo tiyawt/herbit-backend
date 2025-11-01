@@ -6,15 +6,23 @@ import User from "../models/user.js";
 import { bumpSortingStreak } from "./streakService.js";
 import { todayBucketWIB } from "../utils/date.js";
 
-const DAILY_POINT = 10; //
+const DAILY_POINT = 10; 
 
 export async function startGameSession(userId, now = new Date()) {
   const bucket = todayBucketWIB(now);
-  const session = await GameSorting.create({
+  let session = await GameSorting.findOne({
     userId,
-    playedDate: now,
     dayBucket: bucket,
-  });
+  }).sort({ createdAt: -1 });
+
+  if (!session) {
+    session = await GameSorting.create({
+      userId,
+      playedDate: now,
+      dayBucket: bucket,
+    });
+  }
+
   return session;
 }
 
@@ -23,14 +31,33 @@ export async function completeGameSession(sessionId, userId, now = new Date()) {
   if (!session) throw new Error("Session not found");
 
   if (!session.dayBucket) session.dayBucket = todayBucketWIB(now);
-  await session.save();
+
+  if (!session.isCompleted) {
+    session.isCompleted = true;
+    await session.save();
+  }
 
   const userAfter = await bumpSortingStreak(userId, now);
   const entitledPoint = DAILY_POINT;
 
+  const bucket = session.dayBucket;
+  const existingReward = await GameSortingReward.findOne({
+    userId,
+    dayBucket: bucket,
+  });
+
   return {
-    session,
-    reward: { entitledPoint, dayBucket: session.dayBucket },
+    session: {
+      _id: session._id,
+      dayBucket: session.dayBucket,
+      isCompleted: session.isCompleted,
+      rewardClaimed: !!existingReward, 
+    },
+    reward: {
+      entitledPoint,
+      dayBucket: session.dayBucket,
+      alreadyClaimed: !!existingReward, 
+    },
     user: {
       sortingStreak: userAfter?.sortingStreak ?? 0,
       sortingBestStreak: userAfter?.sortingBestStreak ?? 0,
