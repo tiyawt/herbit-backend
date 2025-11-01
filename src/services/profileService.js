@@ -1,6 +1,7 @@
 import DailyTaskChecklist from "../models/dailyTaskChecklist.js";
 import DailyTask from "../models/dailyTask.js";
-import EcoenzymProject from "../models/ecoenzymProject.js";
+import EcoenzimProject from "../models/ecoenzimProject.js";
+import EcoenzimUpload from "../models/ecoenzimUpload.js";
 import GameSortingReward from "../models/gameSortingReward.js";
 import TreeFruit from "../models/treeFruit.js";
 import User from "../models/user.js";
@@ -42,6 +43,12 @@ function computeStreakDays(completedTimestamps = []) {
   return streak;
 }
 
+function getProjectKey(project) {
+  const value =
+    project?.id ?? project?._id?.toString?.() ?? project?._id ?? null;
+  return value == null ? null : value.toString();
+}
+
 function mapLeafActivity(checklist) {
   const activity = { type: "leaf" };
   if (checklist.completedAt) {
@@ -77,7 +84,7 @@ function mapCompletedEcoenzymProjectActivity(project) {
   if (timeSource) {
     activity.time = new Date(timeSource);
   }
-  activity.projectId = project._id?.toString() ?? null;
+  activity.projectId = getProjectKey(project);
   return activity;
 }
 
@@ -92,7 +99,7 @@ function mapOngoingEcoenzymProjectActivity(project) {
   if (timeSource) {
     activity.time = new Date(timeSource);
   }
-  activity.projectId = project._id?.toString() ?? null;
+  activity.projectId = getProjectKey(project);
   return activity;
 }
 
@@ -128,26 +135,58 @@ export async function getUserProfileSummary(username) {
   const user = await User.findOne({ username })
     .select({
       username: 1,
-      name: 1,
       email: 1,
       photoUrl: 1,
       totalPoints: 1,
     })
     .lean();
 
-  if (!user?._id) {
+  if (!user._id) {
     const error = new Error("USER_NOT_FOUND");
     error.status = 404;
     throw error;
   }
 
   const userId = user._id;
+  const userIdString = userId?.toString?.() ?? userId;
+  const userIdFilter = [userIdString];
+  if (userId && typeof userId !== "string") {
+    userIdFilter.push(userId);
+  }
+
+  const ecoenzimDataPromise = (async () => {
+    const projects = await EcoenzimProject.find({
+      userId: { $in: userIdFilter },
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    if (!projects.length) {
+      return { projects: [], uploads: [] };
+    }
+
+    const projectIds = projects
+      .map((project) => getProjectKey(project))
+      .filter((value) => !!value);
+
+    if (!projectIds.length) {
+      return { projects, uploads: [] };
+    }
+
+    const uploads = await EcoenzimUpload.find({
+      ecoenzimProjectId: { $in: projectIds },
+      status: "verified",
+    })
+      .sort({ monthNumber: -1, uploadedDate: -1, createdAt: -1 })
+      .lean();
+
+    return { projects, uploads };
+  })();
 
   const [
     completedChecklists,
     voucherRedemptionsResponse,
-    ecoenzymProjectsCompleted,
-    ecoenzymProjectsOngoing,
+    ecoenzimData,
     treeFruits,
     gameRewards,
     rewardsResponse,
@@ -164,22 +203,7 @@ export async function getUserProfileSummary(username) {
       })
       .lean(),
     getUserRedemptions(userId, { limit: 50 }),
-    EcoenzymProject.find({
-      userId,
-      status: "completed",
-      points: { $gt: 0 },
-    })
-      .sort({ updatedAt: -1, createdAt: -1 })
-      .limit(10)
-      .lean(),
-    EcoenzymProject.find({
-      userId,
-      status: "ongoing",
-      prePointsEarned: { $gt: 0 },
-    })
-      .sort({ updatedAt: -1, createdAt: -1 })
-      .limit(10)
-      .lean(),
+    ecoenzimDataPromise,
     TreeFruit.find({ userId, pointsAwarded: { $gt: 0 }, isClaimed: true })
       .sort({ claimedAt: -1, updatedAt: -1 })
       .limit(10)
@@ -196,6 +220,73 @@ export async function getUserProfileSummary(username) {
   const rewardItems = rewardsResponse?.items ?? [];
   const claimItems = milestoneClaimsResponse?.items ?? [];
   const voucherRedemptions = voucherRedemptionsResponse?.items ?? [];
+  const { projects: ecoenzymProjects, uploads: ecoenzimUploads } =
+    ecoenzimData ?? { projects: [], uploads: [] };
+
+  const uploadsByProject = new Map();
+  ecoenzimUploads.forEach((upload) => {
+    const key =
+      upload.ecoenzimProjectId != null
+        ? upload.ecoenzimProjectId.toString()
+        : null;
+    if (!key) {
+      return;
+    }
+    const entry = uploadsByProject.get(key) ?? {
+      totalPrePoints: 0,
+      verifiedCount: 0,
+      latestUploadedAt: null,
+    };
+    entry.totalPrePoints += upload.prePointsEarned ?? 0;
+    entry.verifiedCount += 1;
+    const uploadDate = upload.uploadedDate
+      ? new Date(upload.uploadedDate)
+      : upload.createdAt
+      ? new Date(upload.createdAt)
+      : null;
+    if (
+      uploadDate &&
+      (!entry.latestUploadedAt || uploadDate > entry.latestUploadedAt)
+    ) {
+      entry.latestUploadedAt = uploadDate;
+    }
+    uploadsByProject.set(key, entry);
+  });
+
+  const ecoenzymProjectsCompleted =
+    ecoenzymProjects
+      ?.filter((project) => project.status === "completed")
+      .slice(0, 10)
+      .map((project) => {
+        const key = getProjectKey(project);
+        const summary = key ? uploadsByProject.get(key) : null;
+        const pointsFromUploads = summary?.totalPrePoints ?? 0;
+        return {
+          ...project,
+          points: project.points ?? pointsFromUploads ?? 0,
+          verifiedUploads: summary?.verifiedCount ?? 0,
+          updatedAt: summary?.latestUploadedAt ?? project.updatedAt,
+        };
+      })
+      .filter((project) => (project.points ?? 0) > 0) ?? [];
+
+  const ecoenzymProjectsOngoing =
+    ecoenzymProjects
+      ?.filter((project) => project.status === "ongoing")
+      .map((project) => {
+        const key = getProjectKey(project);
+        const summary = key ? uploadsByProject.get(key) : null;
+        const prePoints =
+          summary?.totalPrePoints ?? project.prePointsEarned ?? 0;
+        return {
+          ...project,
+          prePointsEarned: prePoints,
+          updatedAt: summary?.latestUploadedAt ?? project.updatedAt,
+          verifiedUploads: summary?.verifiedCount ?? 0,
+        };
+      })
+      .filter((project) => (project.prePointsEarned ?? 0) > 0)
+      .slice(0, 10) ?? [];
 
   const claimMap = new Map();
   claimItems.forEach((item) => {
@@ -362,10 +453,9 @@ export async function getUserProfileSummary(username) {
   return {
     user: {
       id: userId.toString(),
-      username: user.username ?? user.email ?? null,
-      name: user.name ?? user.username ?? user.email,
-      photoUrl: user.photoUrl ?? null,
-      totalPoints: user.totalPoints ?? 0,
+      username: user.username,
+      photoUrl: user.photoUrl,
+      totalPoints: user.totalPoints,
     },
     activities,
     rewards: {

@@ -1,7 +1,7 @@
 import DailyTask from "../models/dailyTask.js";
 import DailyTaskChecklist from "../models/dailyTaskChecklist.js";
-import EcoenzymProject from "../models/ecoenzymProject.js";
-import EcoenzymUploadProgress from "../models/ecoenzymUploadProgress.js";
+import EcoenzimProject from "../models/ecoenzimProject.js";
+import EcoenzimUpload from "../models/ecoenzimUpload.js";
 import User from "../models/user.js";
 import { listVouchers } from "./voucherService.js";
 
@@ -103,14 +103,22 @@ async function buildHabitsToday(userId) {
 }
 
 async function buildEcoenzymSummary(userId) {
+  const normalizedId = userId?.toString?.() ?? userId;
+  const userIdFilter = [
+    normalizedId,
+    ...(userId && typeof userId !== "string" ? [userId] : []),
+  ];
+
   const [project, allProjects] = await Promise.all([
-    EcoenzymProject.findOne({
-      userId,
+    EcoenzimProject.findOne({
+      userId: { $in: userIdFilter },
       status: "ongoing",
     })
       .sort({ createdAt: -1 })
       .lean(),
-    EcoenzymProject.find({ userId }).sort({ createdAt: 1 }).lean(),
+    EcoenzimProject.find({ userId: { $in: userIdFilter } })
+      .sort({ createdAt: 1 })
+      .lean(),
   ]);
   if (!project) return null;
 
@@ -125,16 +133,35 @@ async function buildEcoenzymSummary(userId) {
     0
   );
 
-  const monthNumber = await EcoenzymUploadProgress.countDocuments({
-    ecoenzymProjectId: project._id,
-  });
+  const projectIdValue =
+    project.id ?? project._id?.toString?.() ?? project._id ?? null;
+  const projectId =
+    projectIdValue === null || projectIdValue === undefined
+      ? null
+      : projectIdValue.toString();
+  let monthNumber = 0;
+  if (projectId) {
+    const latestVerifiedUpload = await EcoenzimUpload.findOne({
+      ecoenzimProjectId: projectId,
+      status: "verified",
+    })
+      .sort({ monthNumber: -1, uploadedDate: -1 })
+      .lean();
+    monthNumber = latestVerifiedUpload?.monthNumber ?? 0;
+  }
 
-  const indexInHistory = allProjects.findIndex(
-    (item) => item._id.toString() === project._id.toString()
-  );
+  const indexInHistory = allProjects.findIndex((item) => {
+    const itemIdValue = item.id ?? item._id?.toString?.() ?? item._id ?? null;
+    const itemId =
+      itemIdValue === null || itemIdValue === undefined
+        ? null
+        : itemIdValue.toString();
+    if (!itemId || !projectId) return false;
+    return itemId === projectId;
+  });
   const batchNumber = indexInHistory >= 0 ? indexInHistory + 1 : 1;
   return {
-    projectId: project._id?.toString() ?? null,
+    projectId,
     status: project.status,
     progress: progressPercent,
     monthNumber,
@@ -149,11 +176,11 @@ async function buildVoucherBanners() {
     const response = await listVouchers({
       status: "active",
     });
-    const items = response?.items ?? [];
+    const items = response.items ?? [];
     return items.map((item) => ({
       name: item.name,
-      image: item.bannerUrl ?? item.imageUrl ?? null,
-      href: item.landingUrl ?? "#",
+      image: item.bannerUrl,
+      href: item.landingUrl,
     }));
   } catch {
     return [];
@@ -164,14 +191,13 @@ export async function getHomeSummary(username) {
   const user = await User.findOne({ username })
     .select({
       username: 1,
-      name: 1,
       email: 1,
       photoUrl: 1,
       totalPoints: 1,
     })
     .lean();
 
-  if (!user?._id) {
+  if (!user || !user._id) {
     const error = new Error("USER_NOT_FOUND");
     error.status = 404;
     throw error;
@@ -187,10 +213,9 @@ export async function getHomeSummary(username) {
 
   return {
     user: {
-      name: user.name ?? user.username ?? user.email,
-      username: user.username ?? null,
-      photoUrl: user.photoUrl ?? null,
-      totalPoints: user.totalPoints ?? 0,
+      username: user.username,
+      photoUrl: user.photoUrl,
+      totalPoints: user.totalPoints,
     },
     progress: {
       date: habitSummary.date,
