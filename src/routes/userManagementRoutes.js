@@ -5,9 +5,9 @@ import {
   getUser,
   updateUser,
   deleteUser,
-} from "../controllers/userController.js";
+} from "../controllers/userManagementController.js";
 import { authRequired, adminRequired } from "../middleware/authMiddleware.js";
-import { validateUserUpdate } from "../utils/userValidators.js";
+import { validateUserUpdate } from "../utils/userManagementValidators.js";
 
 const router = Router();
 
