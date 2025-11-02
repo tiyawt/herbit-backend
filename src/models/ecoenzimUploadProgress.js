@@ -8,7 +8,7 @@ const ecoenzimUploadProgressSchema = new mongoose.Schema(
     photoUrl: { type: String, required: true },
     uploadedDate: { type: Date, required: true },
     prePointsEarned: { type: Number, default: 0 },
-    status: { type: String, enum: ["pending", "verified", "rejected"], default: "verified" }
+    status: { type: String, enum: ["pending", "verified", "rejected"], default: "pending" }
   },
   { timestamps: true }
 );
