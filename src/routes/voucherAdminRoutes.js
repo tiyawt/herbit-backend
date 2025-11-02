@@ -8,7 +8,11 @@ import {
   listVoucherAdminHandler,
   getVoucherRedemptionsHandler,
 } from "../controllers/voucherAdminController.js";
+import { adminRequired } from "../middleware/authMiddleware.js";
+
 const router = Router();
+
+router.use(adminRequired);
 
 router.get("/", listVoucherAdminHandler);
 router.post("/", createVoucherAdminHandler);
