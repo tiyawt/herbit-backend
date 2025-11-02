@@ -132,13 +132,29 @@ export const handleChecklistUncheck = async (userId, checklistId) => {
     });
 
     if (deletedLeaf) {
-        await TreeTracker.findOneAndUpdate(
+      // Kurangi total daun hijau
+      const tracker = await TreeTracker.findOneAndUpdate(
         { userId },
         { $inc: { totalGreenLeaves: -1 }, lastActivityDate: new Date() },
         { new: true }
-        );
+      );
 
       console.log(`🍂 Daun ${deletedLeaf._id} dihapus karena checklist ${checklistId} di-uncheck`);
+
+      // === 💡 Tambahan: jika sebelumnya jumlah daun kelipatan 5, hapus buah terakhir ===
+      const totalLeaves = await TreeLeaf.countDocuments({ userId, status: "green" });
+      const remainder = totalLeaves % 5;
+
+      // Kalau setelah uncheck, jumlah daun sekarang sisa 4 dari kelipatan 5 (misal 9 dari 10)
+      if (remainder === 4) {
+        const lastFruit = await TreeFruit.findOne({ userId, isClaimed: false })
+          .sort({ createdAt: -1 }); // buah terakhir yang dibuat
+
+        if (lastFruit) {
+          await TreeFruit.deleteOne({ _id: lastFruit._id });
+          console.log(`🍎 Buah ${lastFruit._id} ikut dihapus karena daun kelipatan 5 di-uncheck`);
+        }
+      }
     } else {
       console.log(`⚠️ Tidak ada daun yang cocok untuk checklist ${checklistId}`);
     }
@@ -146,6 +162,7 @@ export const handleChecklistUncheck = async (userId, checklistId) => {
     console.error("❌ Gagal menghapus daun:", error);
   }
 };
+
 
 export const getAvailableLeaves = async (req, res) => {
   try {
