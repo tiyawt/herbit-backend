@@ -6,8 +6,11 @@ import {
   deleteRewardAdminHandler,
   getRewardAdminHandler,
 } from "../controllers/rewardAdminController.js";
+import { adminRequired } from "../middleware/authMiddleware.js";
 
 const router = Router();
+
+router.use(adminRequired);
 
 router.get("/", listRewardsAdminHandler);
 router.post("/", createRewardAdminHandler);
