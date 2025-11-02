@@ -24,10 +24,23 @@ export const getTodayTasks = async (req, res) => {
   try {
     const userId = req.userId || req.user.id;
 
-    // seed deterministik dari tanggal lokal
-    const todayLocal = new Date().toLocaleDateString("id-ID");
-    const [day, month, year] = todayLocal.split("/");
-    const seed = parseInt(`${year}${month.padStart(2, "0")}${day.padStart(2, "0")}`);
+    // --- 💡 WIB fix (UTC+7) ---
+    const now = new Date();
+    const wibNow = new Date(now.getTime() + 7 * 60 * 60 * 1000); // UTC+7 offset
+    const todayWIB = new Date(
+      wibNow.getFullYear(),
+      wibNow.getMonth(),
+      wibNow.getDate(),
+      0, 0, 0, 0 // ⏰ jam 00:00 WIB
+    );
+
+    const yyyy = todayWIB.getFullYear();
+    const mm = String(todayWIB.getMonth() + 1).padStart(2, "0");
+    const dd = String(todayWIB.getDate()).padStart(2, "0");
+    const todayStr = `${yyyy}-${mm}-${dd}`;
+
+    // seed deterministik berdasar tanggal WIB
+    const seed = parseInt(`${yyyy}${mm}${dd}`);
 
     // ambil semua task dan pilih 5 secara deterministik
     const allTasks = await DailyTask.find();
@@ -66,7 +79,7 @@ export const getTodayTasks = async (req, res) => {
     );
 
     res.status(200).json({
-      date: `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`,
+      date: todayStr, // YYYY-MM-DD (WIB)
       tasks: tasksWithChecklist,
     });
   } catch (error) {
@@ -128,23 +141,22 @@ export const uncheck = async (req, res) => {
 export const getChecklistByUser = async (req, res) => {
   try {
     const userId = req.userId || req.user.id;
-const checklist = await DailyTaskChecklist.find({ userId })
-  .populate("dailyTaskId")
-  .populate("treeLeafId");
+    const checklist = await DailyTaskChecklist.find({ userId })
+      .populate("dailyTaskId")
+      .populate("treeLeafId");
 
-  const tasks = checklist.map((item) => ({
-    _id: item._id,
-    dailyTaskId: item.dailyTaskId?._id,
-    title: item.dailyTaskId?.title,         // ✅ ambil dari model
-    description: item.dailyTaskId?.description,
-    category: item.dailyTaskId?.category,
-    isCompleted: item.isCompleted,
-    completedAt: item.completedAt,
-    treeLeafId: item.treeLeafId?._id || null,
-  }));
+    const tasks = checklist.map((item) => ({
+      _id: item._id,
+      dailyTaskId: item.dailyTaskId?._id,
+      title: item.dailyTaskId?.title,
+      description: item.dailyTaskId?.description,
+      category: item.dailyTaskId?.category,
+      isCompleted: item.isCompleted,
+      completedAt: item.completedAt,
+      treeLeafId: item.treeLeafId?._id || null,
+    }));
 
-  res.json({ tasks });
-
+    res.json({ tasks });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

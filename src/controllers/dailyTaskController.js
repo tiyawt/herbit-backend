@@ -23,18 +23,34 @@ export const getTodayTasks = async (req, res) => {
       return res.status(404).json({ message: "No tasks available" });
     }
 
-    // Ambil tanggal lokal (misal WIB)
-    const todayLocal = new Date().toLocaleDateString("id-ID"); // hasil: "28/10/2025"
-    const [day, month, year] = todayLocal.split("/");
+    // ambil waktu sekarang (UTC), ubah ke WIB
+    const now = new Date();
+    const wibNow = new Date(now.getTime() + 7 * 60 * 60 * 1000); // UTC+7
 
-    // Seed deterministik dari tanggal lokal
-    const seed = parseInt(`${year}${month.padStart(2, "0")}${day.padStart(2, "0")}`);
+    // ubah ke jam 00:00 WIB (awal hari)
+    const todayWIB = new Date(
+      wibNow.getFullYear(),
+      wibNow.getMonth(),
+      wibNow.getDate(),
+      0, 0, 0, 0
+    );
 
+    // buat tanggal dalam format YYYY-MM-DD
+    const yyyy = todayWIB.getFullYear();
+    const mm = String(todayWIB.getMonth() + 1).padStart(2, "0");
+    const dd = String(todayWIB.getDate()).padStart(2, "0");
+
+    const todayStr = `${yyyy}-${mm}-${dd}`;
+
+    // seed deterministik berdasar tanggal WIB
+    const seed = parseInt(`${yyyy}${mm}${dd}`);
+
+    // acak tugas berdasar seed
     const shuffled = shuffleArray(allTasks, seed);
     const selected = shuffled.slice(0, 5);
 
     res.status(200).json({
-      date: `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`, // format YYYY-MM-DD
+      date: todayStr,
       tasks: selected,
     });
   } catch (error) {
