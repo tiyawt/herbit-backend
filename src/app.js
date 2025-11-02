@@ -14,6 +14,7 @@ import treeTrackerRoutes from "./routes/treeTrackersRoutes.js";
 import treeLeavesRoutes from "./routes/treeLeavesRoutes.js";
 import ecoenzimRoutes from "./routes/ecoenzimRoutes.js";
 import cron from "node-cron";
+import weeklyProgressRoutes from "./routes/weeklyProgressRoutes.js";  
 import { autoCancelExpiredProjects } from "./controllers/ecoenzimController.js";
 
 
@@ -43,6 +44,7 @@ app.use("/api/checklists", dailyTaskChecklistRoutes);
 app.use("/api/fruits", treeFruitsRoutes);
 app.use("/api/tree", treeTrackerRoutes);
 app.use("/api/leaves", treeLeavesRoutes);
+app.use("/api/progress", weeklyProgressRoutes)
 app.use("/api/ecoenzim", ecoenzimRoutes);
 
 
