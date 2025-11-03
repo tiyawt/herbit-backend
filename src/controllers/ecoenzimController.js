@@ -1,6 +1,7 @@
 // src/controllers/ecoenzimController.js
 import Project from "../models/ecoenzimProject.js";
 import Upload from "../models/ecoenzimUploadProgress.js";
+import { recordPointsChange } from "../services/pointsHistoryService.js";
 
 const calculateProjectStatus = async (project) => {
   const now = new Date();
@@ -269,6 +270,17 @@ export const claimPoints = async (req, res) => {
     project.canClaim = false;
 
     await project.save();
+
+    if (project.userId && project.points) {
+      await recordPointsChange({
+        userId: project.userId,
+        pointsAmount: project.points,
+        source: "ecoenzim",
+        referenceId: project._id?.toString() ?? null,
+        createdAt: project.claimedAt ?? new Date(),
+      });
+    }
+
     res.json({ success: true, points: project.points });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -334,4 +346,3 @@ export const deleteProject = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
-
