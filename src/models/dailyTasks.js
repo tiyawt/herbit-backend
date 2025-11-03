@@ -14,7 +14,9 @@ const dailyTaskSchema = new mongoose.Schema(
     category: {
       type: String,
       enum: ["eco-action", "health", "learning", "mindfulness"],
-      default: "eco-action",
+    },
+    symbol: {
+      type: String,
     },
     taskDate: {
       type: Date,
@@ -23,12 +25,10 @@ const dailyTaskSchema = new mongoose.Schema(
     },
   },
   {
-    timestamps: true,
+    timestamps: true, // otomatis buat createdAt dan updatedAt
   }
 );
 
-const DailyTask =
-  mongoose.models.DailyTask ||
-  mongoose.model("DailyTask", dailyTaskSchema, "dailyTasks");
+const DailyTask = mongoose.model("DailyTask", dailyTaskSchema, "dailyTasks");
 
 export default DailyTask;

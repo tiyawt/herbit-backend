@@ -1,40 +1,49 @@
 import mongoose from "mongoose";
 
-const { Schema, Types } = mongoose;
 
-const dailyTaskChecklistSchema = new Schema(
+const dailyTaskChecklistSchema = new mongoose.Schema(
   {
     userId: {
-      type: Types.ObjectId,
+      type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      index: true,
     },
     dailyTaskId: {
-      type: Types.ObjectId,
+      type: mongoose.Schema.Types.ObjectId,
       ref: "DailyTask",
       required: true,
-      index: true,
     },
     treeLeafId: {
-      type: Types.ObjectId,
+      type: mongoose.Schema.Types.ObjectId,
       ref: "TreeLeaf",
-      default: null,
+     
+
     },
-    isCompleted: { type: Boolean, default: false },
-    completedAt: { type: Date, default: null },
+    isCompleted: {
+      type: Boolean,
+      default: false,
+    },
+    completedAt: {
+      type: Date,
+    },
   },
-  { timestamps: { createdAt: "createdAt", updatedAt: "updatedAt" } }
+  {
+    timestamps: true,
+  }
 );
 
-dailyTaskChecklistSchema.index({ userId: 1, dailyTaskId: 1 }, { unique: true });
+// Middleware otomatis isi completedAt kalau isCompleted = true
+dailyTaskChecklistSchema.pre("save", function (next) {
+  if (this.isModified("isCompleted") && this.isCompleted && !this.completedAt) {
+    this.completedAt = new Date();
+  }
+  next();
+});
 
-const DailyTaskChecklist =
-  mongoose.models.DailyTaskChecklist ||
-  mongoose.model(
-    "DailyTaskChecklist",
-    dailyTaskChecklistSchema,
-    "dailyTaskChecklist"
-  );
+const DailyTaskChecklist = mongoose.model(
+  "DailyTaskChecklist",
+  dailyTaskChecklistSchema,
+  "dailyTaskChecklist"
+);
 
 export default DailyTaskChecklist;

@@ -1,5 +1,6 @@
 import { ok, fail } from "../utils/response.js";
 import { registerUser, loginUser, me } from "../services/authService.js";
+import { createTreeTrackerForUser } from "./treeTrackersController.js";
 
 const cookieOpts = {
   httpOnly: true,

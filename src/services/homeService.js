@@ -1,4 +1,4 @@
-import DailyTask from "../models/dailyTask.js";
+import DailyTask from "../models/dailyTasks.js";
 import DailyTaskChecklist from "../models/dailyTaskChecklist.js";
 import EcoenzimProject from "../models/ecoenzimProject.js";
 import EcoenzimUpload from "../models/ecoenzimUpload.js";

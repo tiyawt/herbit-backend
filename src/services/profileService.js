@@ -1,9 +1,9 @@
 import DailyTaskChecklist from "../models/dailyTaskChecklist.js";
-import DailyTask from "../models/dailyTask.js";
+import DailyTask from "../models/dailyTasks.js";
 import EcoenzimProject from "../models/ecoenzimProject.js";
 import EcoenzimUpload from "../models/ecoenzimUpload.js";
 import GameSortingReward from "../models/gameSortingReward.js";
-import TreeFruit from "../models/treeFruit.js";
+import TreeFruit from "../models/treeFruits.js";
 import User from "../models/user.js";
 import { listVouchers, getUserRedemptions } from "./voucherService.js";
 import { listRewards, getUserMilestoneClaims } from "./rewardService.js";
