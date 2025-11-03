@@ -5,6 +5,7 @@ export function validateUserUpdate() {
   return (req, res, next) => {
     const { email, username, role, phoneNumber } = req.body;
 
+    // Validasi email
     if (email !== undefined) {
       if (email === "") {
         return res.status(422).json({
@@ -20,6 +21,7 @@ export function validateUserUpdate() {
       }
     }
 
+    // Validasi username
     if (username !== undefined) {
       if (username === "") {
         return res.status(422).json({
@@ -37,6 +39,8 @@ export function validateUserUpdate() {
         });
       }
     }
+
+    // Validasi role 
     if (role !== undefined && !["user", "admin"].includes(role)) {
       return res.status(422).json({
         success: false,
@@ -47,6 +51,7 @@ export function validateUserUpdate() {
       });
     }
 
+    // Validasi phone number 
     if (phoneNumber !== undefined && phoneNumber !== null && phoneNumber !== "") {
       const phoneRegex = /^[0-9+\-\s()]+$/;
       if (!phoneRegex.test(phoneNumber)) {

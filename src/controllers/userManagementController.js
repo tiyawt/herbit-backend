@@ -7,6 +7,7 @@ import {
   deleteUserById,
 } from "../services/userManagementService.js";
 
+// GET all users 
 export async function getUsers(req, res) {
   try {
     const { page = 1, limit = 10, role, search } = req.query;
@@ -36,6 +37,7 @@ export async function getUsers(req, res) {
 export async function getUser(req, res) {
   try {
     const { id } = req.params;
+    
     if (req.user.role !== "admin" && req.user.id !== id) {
       return fail(res, "FORBIDDEN", "Anda tidak memiliki akses ke profil ini", 403);
     }
@@ -57,6 +59,8 @@ export async function updateUser(req, res) {
   try {
     const { id } = req.params;
     const updateData = req.body;
+
+    // Check if user can update this profile
     if (req.user.role !== "admin" && req.user.id !== id) {
       return fail(res, "FORBIDDEN", "Anda tidak memiliki akses untuk update profil ini", 403);
     }
@@ -65,6 +69,8 @@ export async function updateUser(req, res) {
     if (updateData.role && req.user.role !== "admin") {
       delete updateData.role;
     }
+
+    // Prevent updating sensitive fields
     delete updateData.password;
     delete updateData.passwordHash;
     delete updateData._id;
@@ -89,6 +95,7 @@ export async function updateUser(req, res) {
 export async function deleteUser(req, res) {
   try {
     const { id } = req.params;
+
     if (req.user.id === id) {
       return fail(
         res,

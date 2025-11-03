@@ -117,6 +117,7 @@ export async function updateUserById(userId, updateData) {
   };
 }
 
+// Delete user by ID 
 export async function deleteUserById(userId) {
   let session;
 
@@ -147,7 +148,7 @@ export async function deleteUserById(userId) {
         session.endSession();
       } catch {}
     }
-    
+
     try {
       const user = await User.findByIdAndDelete(userId);
       if (!user) return null;
