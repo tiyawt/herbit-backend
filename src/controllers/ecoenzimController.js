@@ -1,67 +1,45 @@
+// src/controllers/ecoenzimController.js
 import Project from "../models/ecoenzimProject.js";
 import Upload from "../models/ecoenzimUploadProgress.js";
 
-// Helper: Hitung status proyek
 const calculateProjectStatus = async (project) => {
   const now = new Date();
   const endDate = new Date(project.endDate);
   const isAfterEndDate = now > endDate;
 
-  // Hitung upload yang sudah diverifikasi
   const verifiedUploads = await Upload.countDocuments({
     ecoenzimProjectId: project._id,
     status: "verified"
   });
 
-  const hasAllUploads = verifiedUploads >= 3;
-
-  // Aturan bisnis
-  if (project.status === "completed") {
-    return { status: "completed", canClaim: false };
-  }
-
+  if (project.status === "completed") return { status: "completed", canClaim: false };
   if (isAfterEndDate) {
-    if (hasAllUploads) {
-      return { status: "completed", canClaim: true };
-    } else {
-      return { status: "cancelled", canClaim: false };
-    }
+    return verifiedUploads >= 3 ? { status: "completed", canClaim: true } : { status: "cancelled", canClaim: false };
   }
-
-  return { status: "ongoing", canClaim: false };
+  return { status: project.started ? "ongoing" : "not_started", canClaim: false };
 };
-
-// Helper: Validasi hari upload
-const isValidUploadDay = (project, uploadDate) => {
-  const startDate = new Date(project.startDate);
-  const diffTime = Math.abs(uploadDate - startDate);
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  
-  return [30, 60, 90].includes(diffDays);
-};
-
-// --------------------
-// PROJECT CONTROLLERS
-// --------------------
 
 export const getProjects = async (req, res) => {
   try {
-    const projects = await Project.find({ userId: req.user?._id || req.query.userId });
-    
-    // Update status untuk setiap proyek
-    const updatedProjects = [];
-    for (const project of projects) {
-      const { status, canClaim } = await calculateProjectStatus(project);
-      if (status !== project.status || canClaim !== project.canClaim) {
-        project.status = status;
-        project.canClaim = canClaim;
-        await project.save();
+    const userId = req.query.userId || req.user?._id;
+    if (!userId) return res.status(400).json({ error: "userId required" });
+
+    const projects = await Project.find({ userId });
+    const updated = [];
+
+    for (const p of projects) {
+      const { status, canClaim } = await calculateProjectStatus(p);
+      if (status !== p.status || canClaim !== p.canClaim) {
+        p.status = status;
+        p.canClaim = canClaim;
+        await p.save();
       }
-      updatedProjects.push(project);
+      updated.push(p);
     }
 
-    res.json(updatedProjects);
+    res.json(updated);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -78,10 +56,8 @@ export const getProjectById = async (req, res) => {
       await project.save();
     }
 
-    // Populate uploads
-    const uploads = await Upload.find({ ecoenzimProjectId: project._id });
+    const uploads = await Upload.find({ ecoenzimProjectId: project._id }).sort({ uploadedDate: -1 });
     project.uploads = uploads;
-
     res.json(project);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -91,25 +67,41 @@ export const getProjectById = async (req, res) => {
 export const createProject = async (req, res) => {
   try {
     const { userId, organicWasteWeight, startDate, endDate } = req.body;
-
     const newProject = new Project({
       userId,
-      organicWasteWeight,
+      organicWasteWeight: organicWasteWeight || 0,
       startDate: new Date(startDate),
       endDate: new Date(endDate),
+      started: true,
+      startedAt: new Date(),
       status: "ongoing",
-      canClaim: false,
-      prePointsEarned: 0,
-      points: 0,
-      isClaimed: false
+      canClaim: false
     });
-
     await newProject.save();
     res.status(201).json({ project: newProject });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
+
+// new route: start project (patch)
+export const startProject = async (req, res) => {
+  try {
+    const project = await Project.findById(req.params.id);
+    if (!project) return res.status(404).json({ error: "Project not found" });
+
+    project.started = true;
+    project.startedAt = new Date();
+    project.status = "ongoing";
+    await project.save();
+    res.json(project);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// createUpload, getUploadsByProject etc. (gunakan versi yang sudah kamu punya)
+// paste/createUpload, getUploadsByProject, verifyUpload, claimPoints, deleteProject here...
 
 // --------------------
 // UPLOAD CONTROLLERS
@@ -119,58 +111,84 @@ export const createProject = async (req, res) => {
 
 export const createUpload = async (req, res) => {
   try {
-    const { ecoenzimProjectId, userId, monthNumber, photoUrl, uploadedDate, prePointsEarned } = req.body;
+    let { ecoenzimProjectId, userId, monthNumber, photoUrl, uploadedDate, prePointsEarned } = req.body;
+
+    // Normalisasi: treat undefined/null/"" as null for monthNumber and photoUrl
+    monthNumber = monthNumber === undefined || monthNumber === null || monthNumber === "" ? null : Number(monthNumber);
+    photoUrl = photoUrl === undefined || photoUrl === null || photoUrl === "" ? null : photoUrl;
+    uploadedDate = uploadedDate ? new Date(uploadedDate) : new Date();
 
     const project = await Project.findById(ecoenzimProjectId);
     if (!project) return res.status(404).json({ error: "Project not found" });
 
-    // ✅ HANYA validasi hari jika monthNumber ada dan 1/2/3
-    if (monthNumber !== undefined && [1, 2, 3].includes(monthNumber)) {
+    // Tentukan apakah ini upload harian (daily) atau upload foto bulanan (progress)
+    const isDailyUpload = monthNumber === null;
+
+    // Jika upload foto (monthNumber diberikan) -> validasi hari 30/60/90
+    if (!isDailyUpload) {
+      // monthNumber expected 1,2,3 (representasi 30/60/90)
+      if (![1,2,3].includes(monthNumber)) {
+        return res.status(400).json({ error: "monthNumber invalid" });
+      }
+      if (!photoUrl) {
+        return res.status(400).json({ error: "Foto wajib untuk upload progress bulanan" });
+      }
+
       const uploadDate = new Date(uploadedDate);
       if (!isValidUploadDay(project, uploadDate)) {
-        return res.status(400).json({ 
-          error: "Upload foto hanya diizinkan di hari ke-30, 60, atau 90 sejak mulai fermentasi" 
+        return res.status(400).json({
+          error: "Upload foto hanya diizinkan di hari ke-30, 60, atau 90 sejak mulai fermentasi"
         });
       }
-    }
 
-
-    // Cek apakah sudah ada upload untuk bulan ini (untuk upload foto)
-    if (!isDailyUpload && monthNumber) {
+      // Cegah duplicate monthly photo untuk tahap yang sama
       const existingUpload = await Upload.findOne({
         ecoenzimProjectId,
         monthNumber
       });
       if (existingUpload) {
-        return res.status(400).json({ error: "Sudah ada upload untuk bulan ini" });
+        return res.status(400).json({ error: "Sudah ada upload foto untuk tahap ini" });
       }
+    } else {
+      // Daily upload: gunakan prePointsEarned dari body kalau ada, kalau tidak, derive dari berat (jika ada)
+      // Jika prePointsEarned tidak dikirim, beri default 1 (small check-in)
+      prePointsEarned = prePointsEarned !== undefined && prePointsEarned !== null ? Number(prePointsEarned) : 1;
     }
 
     const newUpload = new Upload({
       ecoenzimProjectId,
       userId,
-      monthNumber: isDailyUpload ? 1 : monthNumber, // Default 1 untuk daily
-      photoUrl: isDailyUpload ? "https://picsum.photos/400/300?random=" + Date.now() : photoUrl,
-      uploadedDate: new Date(uploadedDate),
-      prePointsEarned: isDailyUpload ? Math.round(prePointsEarned) : 50, // 50 untuk foto, dynamic untuk daily
-      status: isDailyUpload ? "verified" : "pending" // Daily upload langsung verified
+      monthNumber: isDailyUpload ? null : monthNumber,
+      photoUrl: isDailyUpload ? null : photoUrl,
+      uploadedDate,
+      prePointsEarned: isDailyUpload ? Math.round(prePointsEarned) : 50,
+      status: isDailyUpload ? "verified" : "pending"
     });
 
     await newUpload.save();
 
-    // Update prePointsEarned di project
-    const totalVerified = await Upload.countDocuments({
+    // Update project prePointsEarned: total verified uploads * 50 + sum of daily prePoints if you want
+    const totalVerifiedCount = await Upload.countDocuments({
       ecoenzimProjectId,
       status: "verified"
     });
-    project.prePointsEarned = totalVerified * 50;
+
+    // Optionally sum daily prePoints too (here we keep example: project.prePointsEarned = totalVerifiedCount * 50)
+    project.prePointsEarned = totalVerifiedCount * 50;
     await project.save();
+
+    // Setelah menyimpan upload, update project status (bila perlu)
+    if (typeof project.updateProjectStatus === "function") {
+      try { await project.updateProjectStatus(); } catch(e) { console.warn("updateProjectStatus failed:", e); }
+    }
 
     res.status(201).json({ upload: newUpload });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("createUpload error:", err);
+    res.status(500).json({ error: err.message || "Server error" });
   }
 };
+
 
 export const getAllUploads = async (req, res) => {
   try {
@@ -185,13 +203,10 @@ export const getUploadsByProject = async (req, res) => {
   try {
     const uploads = await Upload.find({
       ecoenzimProjectId: req.params.projectId,
-    });
+    }).sort({ uploadedDate: -1 }); // terbaru dulu
 
-    if (!uploads || uploads.length === 0) {
-      return res.status(404).json({ error: "No uploads found for this project" });
-    }
-
-    res.json(uploads);
+    // Kembalikan array kosong jika tidak ada upload (lebih friendly untuk frontend)
+    return res.json(uploads);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -319,3 +334,4 @@ export const deleteProject = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+

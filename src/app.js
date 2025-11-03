@@ -15,9 +15,10 @@ import { autoCancelExpiredProjects } from "./controllers/ecoenzimController.js";
 const app = express();
 
 app.use(cors({
-  origin: 'http://localhost:3000', // Allow only your frontend
-  credentials: true // If you're sending cookies/auth headers
+  origin: 'http://localhost:3000',
+  credentials: true
 }));
+
 
 // Global middleware
 app.use(express.json());
