@@ -1,105 +1,60 @@
-import DailyTask from "../models/dailyTasks.js";
-import DailyTaskChecklist from "../models/dailyTaskChecklist.js";
 import EcoenzimProject from "../models/ecoenzimProject.js";
-import EcoenzimUpload from "../models/ecoenzimUpload.js";
+import EcoenzimUpload from "../models/ecoenzimUploadProgress.js";
 import User from "../models/user.js";
 import { listVouchers } from "./voucherService.js";
+import { getTodayChecklistForUser } from "./dailyTaskChecklistService.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-function seededRandom(seed) {
-  let x = Math.sin(seed) * 10000;
-  return x - Math.floor(x);
-}
-
-function shuffleArray(array, seed) {
-  const result = [...array];
-  for (let i = result.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(seededRandom(seed + i) * (i + 1));
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  return result;
-}
-
-function startOfDay(date = new Date()) {
-  const clone = new Date(date);
-  clone.setHours(0, 0, 0, 0);
-  return clone;
-}
-
-function endOfDay(date = new Date()) {
-  const clone = startOfDay(date);
-  clone.setDate(clone.getDate() + 1);
-  return clone;
-}
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
 async function buildHabitsToday(userId) {
-  const today = startOfDay();
-  const tomorrow = endOfDay();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-  const allTasks = await DailyTask.find().lean();
-  if (!allTasks.length) {
-    return {
-      habits: [],
-      total: 0,
-      completed: 0,
-      percent: 0,
-      date: today.toISOString(),
-    };
-  }
-
-  const localDate = new Date().toLocaleDateString("id-ID", {
-    timeZone: "Asia/Jakarta",
-  });
-
-  const [day, month, year] = localDate.split("/");
-  const seed = parseInt(
-    `${year}${month.padStart(2, "0")}${day.padStart(2, "0")}`
-  );
-  const shuffled = shuffleArray(allTasks, seed);
-  const selectedTasks = shuffled.slice(0, 5);
-
-  const selectedIds = selectedTasks.map((task) => task._id);
-  const checklists = await DailyTaskChecklist.find({
-    userId,
-    dailyTaskId: { $in: selectedIds },
-    $or: [
-      { completedAt: { $gte: today, $lt: tomorrow } },
-      { updatedAt: { $gte: today, $lt: tomorrow } },
-      { createdAt: { $gte: today, $lt: tomorrow } },
-    ],
-  })
-    .select({ dailyTaskId: 1, isCompleted: 1 })
-    .lean();
-  const checklistMap = new Map(
-    checklists.map((item) => [item.dailyTaskId.toString(), item])
-  );
-
-  const habits = selectedTasks.map((task) => {
-    const checklist = checklistMap.get(task._id.toString()) ?? null;
-    const done = checklist?.isCompleted ?? false;
-    return {
+  try {
+    const { tasks, date } = await getTodayChecklistForUser(userId);
+    const habits = tasks.map((task) => ({
       title: task.title,
       category: task.category,
-      done,
+      icon: task.symbol ?? null,
+      done: Boolean(task.isCompleted),
+    }));
+
+    const total = habits.length;
+    const completed = habits.filter((habit) => habit.done).length;
+    const percent = total ? Math.round((completed / total) * 100) : 0;
+
+    // Gunakan tanggal dari checklist (format YYYY-MM-DD) dan ubah ke ISO
+    let isoDate = today.toISOString();
+    if (date) {
+      const parsed = new Date(`${date}T00:00:00.000+07:00`);
+      if (!Number.isNaN(parsed.getTime())) {
+        isoDate = parsed.toISOString();
+      }
+    }
+
+    return {
+      habits,
+      total,
+      completed,
+      percent,
+      date: isoDate,
     };
-  });
-
-  const total = habits.length;
-  const completed = habits.filter((habit) => habit.done).length;
-  const percent = total ? Math.round((completed / total) * 100) : 0;
-
-  return {
-    habits,
-    total,
-    completed,
-    percent,
-    date: today.toISOString(),
-  };
+  } catch (error) {
+    if (error?.message === "NO_DAILY_TASKS_AVAILABLE" || error?.status === 404) {
+      return {
+        habits: [],
+        total: 0,
+        completed: 0,
+        percent: 0,
+        date: today.toISOString(),
+      };
+    }
+    throw error;
+  }
 }
 
 async function buildEcoenzymSummary(userId) {

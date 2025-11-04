@@ -1,6 +1,7 @@
 import Project from "../models/ecoenzimProject.js";
 import Upload from "../models/ecoenzimUpload.js";
 import User from "../models/user.js";
+import { recordPointsChange } from "../services/pointsHistoryService.js";
 
 const calculateProjectStatus = async (project) => {
   const now = new Date();

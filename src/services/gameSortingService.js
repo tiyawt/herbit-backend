@@ -5,6 +5,7 @@ import GameSortingReward from "../models/gameSortingReward.js";
 import User from "../models/user.js";
 import { bumpSortingStreak } from "./streakService.js";
 import { todayBucketWIB } from "../utils/date.js";
+import { recordPointsChange } from "./pointsHistoryService.js";
 
 const DAILY_POINT = 10; 
 
@@ -106,6 +107,17 @@ export async function claimGameReward(sessionId, userId, now = new Date()) {
         await User.updateOne(
           { _id: userId },
           { $inc: { totalPoints: rewardDoc.pointAwarded } },
+          { session: trx }
+        );
+
+        await recordPointsChange(
+          {
+            userId,
+            pointsAmount: rewardDoc.pointAwarded,
+            source: "game",
+            referenceId: rewardDoc._id?.toString() ?? null,
+            createdAt: rewardDoc.claimedAt ?? now,
+          },
           { session: trx }
         );
       }
