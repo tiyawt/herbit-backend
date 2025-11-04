@@ -8,8 +8,8 @@ ecoenzim-backend/
 │  │  ├─ DailyTask.js
 │  │  ├─ DailyTaskChecklist.js
 │  │  ├─ TreeTracker.js
-│  │  ├─ EcoenzimProject.js
-│  │  ├─ EcoenzimUploadProgress.js
+│  │  ├─ ecoenzimProject.js
+│  │  ├─ ecoenzimUpload.js
 │  │  ├─ PointsHistory.js
 │  │  └─ Voucher.js
 │  ├─ controllers/
