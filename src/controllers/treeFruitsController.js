@@ -1,6 +1,7 @@
 import TreeFruit from "../models/treeFruits.js";
 import TreeTracker from "../models/treeTrackers.js";
 import user from "../models/user.js";
+import { recordPointsChange } from "../services/pointsHistoryService.js";
 
 
 // Ambil semua buah user (yang belum dipanen)
@@ -42,6 +43,14 @@ export const claimFruit = async (req, res) => {
       { new: true }
     );
 
+    await recordPointsChange({
+      userId,
+      pointsAmount: fruit.pointsAwarded ?? 0,
+      source: "fruit",
+      referenceId: fruit._id?.toString() ?? null,
+      createdAt: fruit.claimedAt ?? new Date(),
+    });
+
     res.json({
       message: "Buah berhasil dipanen 🍎 +10 poin!",
       fruit,
@@ -50,4 +59,3 @@ export const claimFruit = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-
