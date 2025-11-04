@@ -1,4 +1,3 @@
-// src/models/ecoenzimUploadProgress.js
 import mongoose from "mongoose";
 
 const ecoenzimUploadSchema = new mongoose.Schema(

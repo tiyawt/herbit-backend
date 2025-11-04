@@ -7,11 +7,13 @@ import { initNotificationSchedulers } from "./src/jobs/notificationScheduler.js"
 import { initCronJobs } from "./src/jobs/taskScheduler.js";
 import { initProfilePhotoBucket } from "./src/utils/gridfs.js";
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 try {
   await connectToDb();
   initProfilePhotoBucket();
+
+
   initNotificationSchedulers();
   initCronJobs();
   app.listen(PORT, () => {

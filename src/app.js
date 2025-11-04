@@ -58,7 +58,7 @@ app.use("/api/fruits", treeFruitsRoutes);
 app.use("/api/tree", treeTrackerRoutes);
 app.use("/api/leaves", treeLeavesRoutes);
 app.use("/api/progress", weeklyProgressRoutes);
-app.use("/api", ecoenzimRoutes);
+app.use("/api/ecoenzim", ecoenzimRoutes);
 app.use("/api/users", userManagementRoutes);
 
 cron.schedule("0 * * * *", async () => {
