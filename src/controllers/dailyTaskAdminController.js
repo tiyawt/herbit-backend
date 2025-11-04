@@ -24,8 +24,8 @@ export const getDailyTaskAdminHandler = async (req, res) => {
 // POST /admin/dailytasks
 export const createDailyTaskAdminHandler = async (req, res) => {
   try {
-    const { title, description, category, symbol, taskDate } = req.body;
-    const task = await DailyTask.create({ title, description, category, symbol, taskDate });
+    const { title, category, symbol } = req.body;
+    const task = await DailyTask.create({ title, category, symbol });
     res.status(201).json(task);
   } catch (err) {
     res.status(400).json({ message: "Failed to create daily task", error: err.message });
