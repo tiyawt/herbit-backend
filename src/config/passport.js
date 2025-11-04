@@ -24,7 +24,7 @@ if (!JWT_SECRET) {
 }
 
 const callbackURL = `${
-  OAUTH_REDIRECT_BASE || "http://localhost:5000"
+  OAUTH_REDIRECT_BASE || "http://localhost:5001"
 }/api/auth/oauth/google/callback`;
 
 passport.use(

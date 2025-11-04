@@ -1,4 +1,3 @@
-// src/app.js
 import express from "express";
 import cors from "cors";
 import morgan from "morgan";
@@ -15,19 +14,25 @@ import treeTrackerRoutes from "./routes/treeTrackersRoutes.js";
 import treeLeavesRoutes from "./routes/treeLeavesRoutes.js";
 import ecoenzimRoutes from "./routes/ecoenzimRoutes.js";
 import cron from "node-cron";
-import weeklyProgressRoutes from "./routes/weeklyProgressRoutes.js";  
+import weeklyProgressRoutes from "./routes/weeklyProgressRoutes.js";
+import userManagementRoutes from "./routes/userManagementRoutes.js";
+import authRoutes from "./routes/authRoutes.js";
 import dailyTaskAdminRoutes from "./routes/dailyTaskAdminRoutes.js";
 import { autoCancelExpiredProjects } from "./controllers/ecoenzimController.js";
 import userManagementRoutes from "./routes/userManagementRoutes.js";
+import authRoutes from "./routes/authRoutes.js";
+import { autoCancelExpiredProjects } from "./controllers/ecoenzimController.js";
 
 const app = express();
 
+
 app.use(
   cors({
-    origin: "http://localhost:3000", // FE
-    credentials: true, // untuk kirim/terima cookie
+    origin: "http://localhost:3000",
+    credentials: true,
   })
 );
+
 
 // Global middleware
 app.use(express.json());
@@ -42,9 +47,13 @@ app.use(
     },
   })
 );
+
 app.get("/", (req, res) => {
   res.json({ message: "Server up and running 🚀" });
 });
+
+// ✅ Tambahkan ini
+app.use("/api/auth", authRoutes);
 
 // All API routes
 app.use("/api", routes);
@@ -60,10 +69,9 @@ app.use("/api/admin/daily", dailyTaskAdminRoutes)
 app.use("/api/ecoenzim", ecoenzimRoutes);
 app.use("/api/users", userManagementRoutes);
 
-cron.schedule("* * * * *", async () => {
+cron.schedule("0 * * * *", async () => {
   console.log("⏳ Cek project kadaluarsa...");
   await autoCancelExpiredProjects();
 });
-
 
 export default app;
