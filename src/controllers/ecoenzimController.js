@@ -1,6 +1,6 @@
-// src/controllers/ecoenzimController.js
+// backend/src/controllers/ecoenzimController.js
 import Project from "../models/ecoenzimProject.js";
-import Upload from "../models/ecoenzimUploadProgress.js";
+import Upload from "../models/ecoenzimUpload.js";
 
 const calculateProjectStatus = async (project) => {
   const now = new Date();
@@ -19,11 +19,11 @@ const calculateProjectStatus = async (project) => {
   return { status: project.started ? "ongoing" : "not_started", canClaim: false };
 };
 
+// ==================== PROJECT CONTROLLERS ====================
+
 export const getProjects = async (req, res) => {
   try {
-    const userId = req.query.userId || req.user?._id;
-    if (!userId) return res.status(400).json({ error: "userId required" });
-
+    const userId = req.user.id;
     const projects = await Project.find({ userId });
     const updated = [];
 
@@ -39,7 +39,7 @@ export const getProjects = async (req, res) => {
 
     res.json(updated);
   } catch (err) {
-    console.error(err);
+    console.error("getProjects error:", err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -47,7 +47,15 @@ export const getProjects = async (req, res) => {
 export const getProjectById = async (req, res) => {
   try {
     const project = await Project.findById(req.params.id);
-    if (!project) return res.status(404).json({ error: "Project not found" });
+    
+    if (!project) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+
+    // Verify ownership
+    if (project.userId.toString() !== req.user.id.toString()) {
+      return res.status(403).json({ error: "Forbidden - Not your project" });
+    }
 
     const { status, canClaim } = await calculateProjectStatus(project);
     if (status !== project.status || canClaim !== project.canClaim) {
@@ -56,8 +64,6 @@ export const getProjectById = async (req, res) => {
       await project.save();
     }
 
-    const uploads = await Upload.find({ ecoenzimProjectId: project._id }).sort({ uploadedDate: -1 });
-    project.uploads = uploads;
     res.json(project);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -66,7 +72,9 @@ export const getProjectById = async (req, res) => {
 
 export const createProject = async (req, res) => {
   try {
-    const { userId, organicWasteWeight, startDate, endDate } = req.body;
+    const userId = req.user.id;
+    const { organicWasteWeight, startDate, endDate } = req.body;
+
     const newProject = new Project({
       userId,
       organicWasteWeight: organicWasteWeight || 0,
@@ -75,84 +83,115 @@ export const createProject = async (req, res) => {
       started: true,
       startedAt: new Date(),
       status: "ongoing",
-      canClaim: false
+      canClaim: false,
+      prePointsEarned: 0 // 👈 Start with 0 points
     });
+
     await newProject.save();
     res.status(201).json({ project: newProject });
   } catch (err) {
+    console.error("createProject error:", err);
     res.status(500).json({ error: err.message });
   }
 };
 
-// new route: start project (patch)
 export const startProject = async (req, res) => {
   try {
     const project = await Project.findById(req.params.id);
-    if (!project) return res.status(404).json({ error: "Project not found" });
+    
+    if (!project) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+
+    if (project.userId.toString() !== req.user.id.toString()) {
+      return res.status(403).json({ error: "Forbidden - Not your project" });
+    }
 
     project.started = true;
     project.startedAt = new Date();
     project.status = "ongoing";
     await project.save();
+    
     res.json(project);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-// createUpload, getUploadsByProject etc. (gunakan versi yang sudah kamu punya)
-// paste/createUpload, getUploadsByProject, verifyUpload, claimPoints, deleteProject here...
+export const deleteProject = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const project = await Project.findById(id);
+    
+    if (!project) {
+      return res.status(404).json({ error: "Project not found" });
+    }
 
-// --------------------
-// UPLOAD CONTROLLERS
-// --------------------
+    if (project.userId.toString() !== req.user.id.toString()) {
+      return res.status(403).json({ error: "Forbidden - Not your project" });
+    }
 
-// src/controllers/ecoenzimController.js
+    await Upload.deleteMany({ ecoenzimProjectId: id });
+    await Project.findByIdAndDelete(id);
+
+    res.json({ message: "Project deleted successfully" });
+  } catch (err) {
+    console.error("Delete project error:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ==================== UPLOAD CONTROLLERS ====================
 
 export const createUpload = async (req, res) => {
   try {
-    let { ecoenzimProjectId, userId, monthNumber, photoUrl, uploadedDate, prePointsEarned } = req.body;
+    const userId = req.user.id;
+    let { ecoenzimProjectId, monthNumber, photoUrl, uploadedDate, prePointsEarned } = req.body;
 
-    // Normalisasi: treat undefined/null/"" as null for monthNumber and photoUrl
+    const project = await Project.findById(ecoenzimProjectId);
+    
+    if (!project) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+
+    if (project.userId.toString() !== userId.toString()) {
+      return res.status(403).json({ error: "Forbidden - Not your project" });
+    }
+
+    // Normalisasi
     monthNumber = monthNumber === undefined || monthNumber === null || monthNumber === "" ? null : Number(monthNumber);
     photoUrl = photoUrl === undefined || photoUrl === null || photoUrl === "" ? null : photoUrl;
     uploadedDate = uploadedDate ? new Date(uploadedDate) : new Date();
 
-    const project = await Project.findById(ecoenzimProjectId);
-    if (!project) return res.status(404).json({ error: "Project not found" });
-
-    // Tentukan apakah ini upload harian (daily) atau upload foto bulanan (progress)
     const isDailyUpload = monthNumber === null;
 
-    // Jika upload foto (monthNumber diberikan) -> validasi hari 30/60/90
-    if (!isDailyUpload) {
-      // monthNumber expected 1,2,3 (representasi 30/60/90)
-      if (![1,2,3].includes(monthNumber)) {
-        return res.status(400).json({ error: "monthNumber invalid" });
+    // 👇 POINT LOGIC UPDATED
+    let finalPoints = 0;
+    
+    if (isDailyUpload) {
+      // Daily check-in = 0 points
+      finalPoints = 0;
+    } else {
+      // Photo upload
+      if (![1, 2, 3].includes(monthNumber)) {
+        return res.status(400).json({ error: "monthNumber harus 1, 2, atau 3" });
       }
       if (!photoUrl) {
         return res.status(400).json({ error: "Foto wajib untuk upload progress bulanan" });
       }
 
-      const uploadDate = new Date(uploadedDate);
-      if (!isValidUploadDay(project, uploadDate)) {
-        return res.status(400).json({
-          error: "Upload foto hanya diizinkan di hari ke-30, 60, atau 90 sejak mulai fermentasi"
-        });
-      }
-
-      // Cegah duplicate monthly photo untuk tahap yang sama
+      // Check duplicate
       const existingUpload = await Upload.findOne({
         ecoenzimProjectId,
         monthNumber
       });
+      
       if (existingUpload) {
-        return res.status(400).json({ error: "Sudah ada upload foto untuk tahap ini" });
+        return res.status(400).json({ error: "Sudah ada upload foto untuk bulan ini" });
       }
-    } else {
-      // Daily upload: gunakan prePointsEarned dari body kalau ada, kalau tidak, derive dari berat (jika ada)
-      // Jika prePointsEarned tidak dikirim, beri default 1 (small check-in)
-      prePointsEarned = prePointsEarned !== undefined && prePointsEarned !== null ? Number(prePointsEarned) : 1;
+
+      // Photo upload = 50 points
+      finalPoints = 50;
     }
 
     const newUpload = new Upload({
@@ -161,26 +200,24 @@ export const createUpload = async (req, res) => {
       monthNumber: isDailyUpload ? null : monthNumber,
       photoUrl: isDailyUpload ? null : photoUrl,
       uploadedDate,
-      prePointsEarned: isDailyUpload ? Math.round(prePointsEarned) : 50,
-      status: isDailyUpload ? "verified" : "pending"
+      prePointsEarned: finalPoints,
+      status: isDailyUpload ? "verified" : "pending" // Daily auto-verified
     });
 
     await newUpload.save();
 
-    // Update project prePointsEarned: total verified uploads * 50 + sum of daily prePoints if you want
-    const totalVerifiedCount = await Upload.countDocuments({
+    // Update project prePointsEarned (only verified uploads)
+    const allVerifiedUploads = await Upload.find({
       ecoenzimProjectId,
       status: "verified"
     });
 
-    // Optionally sum daily prePoints too (here we keep example: project.prePointsEarned = totalVerifiedCount * 50)
-    project.prePointsEarned = totalVerifiedCount * 50;
-    await project.save();
+    const totalPoints = allVerifiedUploads.reduce((sum, upload) => {
+      return sum + (upload.prePointsEarned || 0);
+    }, 0);
 
-    // Setelah menyimpan upload, update project status (bila perlu)
-    if (typeof project.updateProjectStatus === "function") {
-      try { await project.updateProjectStatus(); } catch(e) { console.warn("updateProjectStatus failed:", e); }
-    }
+    project.prePointsEarned = totalPoints;
+    await project.save();
 
     res.status(201).json({ upload: newUpload });
   } catch (err) {
@@ -189,10 +226,13 @@ export const createUpload = async (req, res) => {
   }
 };
 
-
 export const getAllUploads = async (req, res) => {
   try {
-    const uploads = await Upload.find();
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ error: "Forbidden - Admin only" });
+    }
+    
+    const uploads = await Upload.find().sort({ uploadedDate: -1 });
     res.json(uploads);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -201,33 +241,53 @@ export const getAllUploads = async (req, res) => {
 
 export const getUploadsByProject = async (req, res) => {
   try {
+    const project = await Project.findById(req.params.projectId);
+    
+    if (!project) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+
+    if (project.userId.toString() !== req.user.id.toString()) {
+      return res.status(403).json({ error: "Forbidden - Not your project" });
+    }
+
     const uploads = await Upload.find({
       ecoenzimProjectId: req.params.projectId,
-    }).sort({ uploadedDate: -1 }); // terbaru dulu
+    }).sort({ uploadedDate: -1 });
 
-    // Kembalikan array kosong jika tidak ada upload (lebih friendly untuk frontend)
     return res.json(uploads);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-
 export const verifyUpload = async (req, res) => {
   try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ error: "Forbidden - Admin only" });
+    }
+
     const upload = await Upload.findById(req.params.id);
-    if (!upload) return res.status(404).json({ error: "Upload not found" });
+    
+    if (!upload) {
+      return res.status(404).json({ error: "Upload not found" });
+    }
 
     upload.status = "verified";
     await upload.save();
 
     // Update project prePointsEarned
     const project = await Project.findById(upload.ecoenzimProjectId);
-    const totalVerified = await Upload.countDocuments({
+    const allVerifiedUploads = await Upload.find({
       ecoenzimProjectId: upload.ecoenzimProjectId,
       status: "verified"
     });
-    project.prePointsEarned = totalVerified * 50;
+
+    const totalPoints = allVerifiedUploads.reduce((sum, u) => {
+      return sum + (u.prePointsEarned || 0);
+    }, 0);
+    
+    project.prePointsEarned = totalPoints;
     await project.save();
 
     res.json({ upload });
@@ -236,17 +296,20 @@ export const verifyUpload = async (req, res) => {
   }
 };
 
-// --------------------
-// CLAIM CONTROLLER
-// --------------------
-
 export const claimPoints = async (req, res) => {
   try {
     const project = await Project.findById(req.params.id);
-    if (!project) return res.status(404).json({ error: "Project not found" });
+    
+    if (!project) {
+      return res.status(404).json({ error: "Project not found" });
+    }
 
-    // Ambil status terbaru
+    if (project.userId.toString() !== req.user.id.toString()) {
+      return res.status(403).json({ error: "Forbidden - Not your project" });
+    }
+
     const { status, canClaim } = await calculateProjectStatus(project);
+    
     if (status !== project.status || canClaim !== project.canClaim) {
       project.status = status;
       project.canClaim = canClaim;
@@ -260,9 +323,9 @@ export const claimPoints = async (req, res) => {
       });
     }
 
-    // Proses klaim
+    // Process claim
     project.points = project.prePointsEarned;
-    project.prePointsEarned = null; // Sesuai contoh data
+    project.prePointsEarned = null;
     project.isClaimed = true;
     project.claimedAt = new Date();
     project.status = "completed";
@@ -275,29 +338,22 @@ export const claimPoints = async (req, res) => {
   }
 };
 
-// --------------------
-// CRON JOB: AUTO-CANCEL EXPIRED PROJECTS
-// --------------------
-
 export const autoCancelExpiredProjects = async () => {
   try {
     const now = new Date();
-    
-    // Cari proyek ongoing yang sudah lewat endDate
     const expiredProjects = await Project.find({
       status: "ongoing",
       endDate: { $lt: now }
     });
 
     let cancelledCount = 0;
+    
     for (const project of expiredProjects) {
-      // Cek jumlah upload verified
       const verifiedUploads = await Upload.countDocuments({
         ecoenzimProjectId: project._id,
         status: "verified"
       });
 
-      // Jika kurang dari 3, cancel
       if (verifiedUploads < 3) {
         project.status = "cancelled";
         project.canClaim = false;
@@ -313,25 +369,3 @@ export const autoCancelExpiredProjects = async () => {
     throw err;
   }
 };
-
-
-export const deleteProject = async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    // Hapus semua upload terkait
-    await Upload.deleteMany({ ecoenzimProjectId: id });
-    
-    // Hapus project
-    const project = await Project.findByIdAndDelete(id);
-    if (!project) {
-      return res.status(404).json({ error: "Project not found" });
-    }
-
-    res.json({ message: "Project deleted successfully" });
-  } catch (err) {
-    console.error("Delete project error:", err);
-    res.status(500).json({ error: err.message });
-  }
-};
-

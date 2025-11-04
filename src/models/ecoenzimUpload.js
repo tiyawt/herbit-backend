@@ -1,7 +1,7 @@
 // src/models/ecoenzimUploadProgress.js
 import mongoose from "mongoose";
 
-const ecoenzimUploadProgressSchema = new mongoose.Schema(
+const ecoenzimUploadSchema = new mongoose.Schema(
   {
     ecoenzimProjectId: { type: mongoose.Schema.Types.ObjectId, ref: "ecoenzimProject", required: true },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
@@ -14,4 +14,4 @@ const ecoenzimUploadProgressSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-export default mongoose.models.ecoenzimUploadProgress || mongoose.model("ecoenzimUploadProgress", ecoenzimUploadProgressSchema);
+export default mongoose.models.ecoenzimUpload || mongoose.model("ecoenzimUpload", ecoenzimUploadSchema);

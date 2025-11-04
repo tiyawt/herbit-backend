@@ -1,6 +1,6 @@
 // src/models/ecoenzimProject.js
 import mongoose from "mongoose";
-import Upload from "./ecoenzimUploadProgress.js"; // dipakai di updateProjectStatus
+import Upload from "./ecoenzimUpload.js"; // dipakai di updateProjectStatus
 
 const projectSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
