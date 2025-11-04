@@ -21,12 +21,15 @@ import userManagementRoutes from "./routes/userManagementRoutes.js";
 
 const app = express();
 
+
 app.use(
   cors({
     origin: "http://localhost:3000", // FE
     credentials: true, // untuk kirim/terima cookie
   })
 );
+
+
 
 // Global middleware
 app.use(express.json());
@@ -58,7 +61,8 @@ app.use("/api/progress", weeklyProgressRoutes)
 app.use("/api/ecoenzim", ecoenzimRoutes);
 app.use("/api/users", userManagementRoutes);
 
-cron.schedule("* * * * *", async () => {
+
+cron.schedule("0 * * * *", async () => {
   console.log("⏳ Cek project kadaluarsa...");
   await autoCancelExpiredProjects();
 });
