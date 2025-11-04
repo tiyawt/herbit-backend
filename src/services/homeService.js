@@ -1,5 +1,5 @@
 import EcoenzimProject from "../models/ecoenzimProject.js";
-import EcoenzimUpload from "../models/ecoenzimUploadProgress.js";
+import EcoenzimUpload from "../models/ecoenzimUpload.js";
 import User from "../models/user.js";
 import { listVouchers } from "./voucherService.js";
 import { getTodayChecklistForUser } from "./dailyTaskChecklistService.js";

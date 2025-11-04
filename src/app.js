@@ -19,20 +19,15 @@ import userManagementRoutes from "./routes/userManagementRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import dailyTaskAdminRoutes from "./routes/dailyTaskAdminRoutes.js";
 import { autoCancelExpiredProjects } from "./controllers/ecoenzimController.js";
-import userManagementRoutes from "./routes/userManagementRoutes.js";
-import authRoutes from "./routes/authRoutes.js";
-import { autoCancelExpiredProjects } from "./controllers/ecoenzimController.js";
 
 const app = express();
 
-
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    origin: process.env.FRONTEND_URL || "http://localhost:3000",
     credentials: true,
   })
 );
-
 
 // Global middleware
 app.use(express.json());
@@ -64,8 +59,8 @@ app.use("/api/checklists", dailyTaskChecklistRoutes);
 app.use("/api/fruits", treeFruitsRoutes);
 app.use("/api/tree", treeTrackerRoutes);
 app.use("/api/leaves", treeLeavesRoutes);
-app.use("/api/progress", weeklyProgressRoutes)
-app.use("/api/admin/daily", dailyTaskAdminRoutes)
+app.use("/api/progress", weeklyProgressRoutes);
+app.use("/api/admin/daily", dailyTaskAdminRoutes);
 app.use("/api/ecoenzim", ecoenzimRoutes);
 app.use("/api/users", userManagementRoutes);
 
