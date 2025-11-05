@@ -32,7 +32,7 @@ app.set("trust proxy", 1);
 
 const allowedOrigins = [
   "http://localhost:3000",
-  "https://herbit-fe.vercel.app/",
+  "https://herbit-fe.vercel.app",
   process.env.CLIENT_APP_URL,
 ]
   .filter(Boolean)
