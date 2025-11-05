@@ -20,6 +20,7 @@ const router = Router();
 
 // Auth
 router.post(
+  
   "/register",
   requireBody(["email", "username", "password", "confirm_password"]),
   validateRegister(),
