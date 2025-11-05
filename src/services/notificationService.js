@@ -165,6 +165,6 @@ export async function markAllRead(userId, type) {
 }
 
 export async function clearAllNotifications(userId) {
-  const result = await notification.deleteMany({ user_id: userId });
+  const result = await notification.deleteMany({ userId: userId });
   return result;
 }
