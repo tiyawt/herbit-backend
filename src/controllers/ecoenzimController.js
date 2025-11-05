@@ -222,30 +222,41 @@ export const deleteProject = async (req, res) => {
 
 export const startProject = async (req, res) => {
   try {
-    const project = await Project.findById(req.params.id);
-    
+    const { id } = req.params;
+    const { weight } = req.body;
+
+    console.log("REQ PARAMS:", id);
+    console.log("REQ BODY:", req.body);
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid project ID" });
+    }
+
+    const project = await Project.findById(id);
     if (!project) {
-      return res.status(404).json({ error: "Project not found" });
+      return res.status(404).json({ success: false, message: "Project not found" });
     }
 
-    if (project.userId.toString() !== req.user.id.toString()) {
-      return res.status(403).json({ error: "Forbidden - Not your project" });
-    }
-
-    if (project.started) {
-      return res.status(400).json({ error: "Project sudah dimulai" });
-    }
-
+    project.organicWasteWeight = weight; // ✅ naming sesuai schema
     project.started = true;
     project.startedAt = new Date();
-    project.status = "ongoing";
+    project.status = "ongoing"; // ✅ sesuai enum schema
+
     await project.save();
-    
-    res.json({ project });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+
+    return res.json({
+      success: true,
+      message: "Project started successfully",
+      project,
+    });
+
+  } catch (error) {
+    console.error("🔥 Start Project Error:", error);
+    res.status(500).json({ success: false, message: "Failed to start project" });
   }
 };
+
+
 
 export const createUpload = async (req, res) => {
   try {
@@ -644,4 +655,10 @@ export const autoCancelExpiredProjects = async () => {
     console.error("❌ Error in autoCancelExpiredProjects:", err);
     throw err;
   }
+  console.log("🔥 Start Request:", {
+    id: req.params.id,
+    body: req.body,
+    user: req.user?.id,
+  });
+  
 };
