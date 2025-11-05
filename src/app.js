@@ -19,9 +19,6 @@ import userManagementRoutes from "./routes/userManagementRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import dailyTaskAdminRoutes from "./routes/dailyTaskAdminRoutes.js";
 import { autoCancelExpiredProjects } from "./controllers/ecoenzimController.js";
-import userManagementRoutes from "./routes/userManagementRoutes.js";
-import authRoutes from "./routes/authRoutes.js";
-import { autoCancelExpiredProjects } from "./controllers/ecoenzimController.js";
 
 const app = express();
 
