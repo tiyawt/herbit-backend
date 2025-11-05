@@ -5,10 +5,7 @@ import { listVouchers } from "./voucherService.js";
 import { getTodayChecklistForUser } from "./dailyTaskChecklistService.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
-}
+const TARGET_CHECKINS = 90;
 
 async function buildHabitsToday(userId) {
   const today = new Date();
@@ -80,13 +77,15 @@ async function buildEcoenzymSummary(userId) {
   const now = new Date();
   const start = project.startDate ? new Date(project.startDate) : now;
   const end = project.endDate ? new Date(project.endDate) : now;
-  const totalDuration = Math.max(end.getTime() - start.getTime(), 1);
-  const elapsed = clamp(now.getTime() - start.getTime(), 0, totalDuration);
-  const progressPercent = Math.round((elapsed / totalDuration) * 100);
-  const daysRemaining = Math.max(
-    Math.ceil((end.getTime() - now.getTime()) / MS_PER_DAY),
+
+  const totalDays = Math.max(
+    Math.ceil((end.getTime() - start.getTime()) / MS_PER_DAY),
     0
   );
+  const elapsedDaysRaw = (now.getTime() - start.getTime()) / MS_PER_DAY;
+  const elapsedDays = Math.max(Math.floor(elapsedDaysRaw), 0);
+  const consumedDays = now >= start ? Math.min(elapsedDays + 1, totalDays) : 0;
+  const daysRemaining = Math.max(totalDays - consumedDays, 0);
 
   const projectIdValue =
     project.id ?? project._id?.toString?.() ?? project._id ?? null;
@@ -95,15 +94,32 @@ async function buildEcoenzymSummary(userId) {
       ? null
       : projectIdValue.toString();
   let monthNumber = 0;
+  let totalCheckins = 0;
   if (projectId) {
-    const latestVerifiedUpload = await EcoenzimUpload.findOne({
-      ecoenzimProjectId: projectId,
-      status: "verified",
-    })
-      .sort({ monthNumber: -1, uploadedDate: -1 })
-      .lean();
+    const [latestVerifiedUpload, checkinCount] = await Promise.all([
+      EcoenzimUpload.findOne({
+        ecoenzimProjectId: projectId,
+        status: "verified",
+        monthNumber: { $ne: null },
+      })
+        .sort({ monthNumber: -1, uploadedDate: -1 })
+        .lean(),
+      EcoenzimUpload.countDocuments({
+        ecoenzimProjectId: projectId,
+        status: "verified",
+        monthNumber: null,
+      }),
+    ]);
     monthNumber = latestVerifiedUpload?.monthNumber ?? 0;
+    totalCheckins = checkinCount;
   }
+
+  const progressPercent = Math.min(
+    100,
+    Math.round(
+      (Math.min(totalCheckins, TARGET_CHECKINS) / TARGET_CHECKINS) * 100
+    )
+  );
 
   const indexInHistory = allProjects.findIndex((item) => {
     const itemIdValue = item.id ?? item._id?.toString?.() ?? item._id ?? null;
