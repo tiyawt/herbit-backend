@@ -18,7 +18,6 @@ import weeklyProgressRoutes from "./routes/weeklyProgressRoutes.js";
 import userManagementRoutes from "./routes/userManagementRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import dailyTaskAdminRoutes from "./routes/dailyTaskAdminRoutes.js";
-import weeklyProgressRoutes from "./routes/weeklyProgressRoutes.js";
 import { autoCancelExpiredProjects } from "./controllers/ecoenzimController.js";
 
 const app = express();
