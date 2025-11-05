@@ -2,12 +2,17 @@ import { ok, fail } from "../utils/response.js";
 import { registerUser, loginUser, me } from "../services/authService.js";
 import { createTreeTrackerForUser } from "./treeTrackersController.js";
 
+const isProduction = process.env.NODE_ENV === "production";
+const cookieDomain =
+  process.env.COOKIE_DOMAIN || (isProduction ? ".vercel.app" : undefined);
+
 const cookieOpts = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "lax",
+  secure: isProduction,
+  sameSite: isProduction ? "none" : "lax",
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 hari
   path: "/",
+  ...(cookieDomain ? { domain: cookieDomain } : {}),
 };
 
 export async function register(req, res) {
@@ -58,6 +63,6 @@ export async function getMe(req, res) {
 }
 
 export async function logout(req, res) {
-  res.clearCookie("access_token", { path: "/" });
+  res.clearCookie("access_token", cookieOpts);
   return ok(res, null, "Logged out");
 }
