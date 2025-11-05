@@ -2,10 +2,12 @@ import { ok, fail } from "../utils/response.js";
 import { registerUser, loginUser, me } from "../services/authService.js";
 import { createTreeTrackerForUser } from "./treeTrackersController.js";
 
+const isProduction = process.env.NODE_ENV === "production";
+
 const cookieOpts = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "lax",
+  secure: isProduction,
+  sameSite: isProduction ? "none" : "lax",
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 hari
   path: "/",
 };
