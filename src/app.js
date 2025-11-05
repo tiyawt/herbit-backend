@@ -28,6 +28,32 @@ app.use(
     credentials: true,
   })
 );
+app.set("trust proxy", 1);
+
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://herbit-fe.vercel.app/",
+  process.env.CLIENT_APP_URL,
+]
+  .filter(Boolean)
+  .map((origin) => origin.trim());
+
+const corsOptions = {
+  credentials: true,
+  origin(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
+};
+
+app.use(cors(corsOptions));
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+  next();
+});
 
 // Global middleware
 app.use(express.json());
@@ -61,6 +87,7 @@ app.use("/api/tree", treeTrackerRoutes);
 app.use("/api/leaves", treeLeavesRoutes);
 app.use("/api/progress", weeklyProgressRoutes);
 app.use("/api/admin/daily", dailyTaskAdminRoutes);
+app.use("/api/progress", weeklyProgressRoutes);
 app.use("/api/ecoenzim", ecoenzimRoutes);
 app.use("/api/users", userManagementRoutes);
 
