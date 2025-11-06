@@ -12,7 +12,13 @@ const cookieOpts = {
   sameSite: isProduction ? "none" : "lax",
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 hari
   path: "/",
-  ...(cookieDomain ? { domain: cookieDomain } : {}),
+};
+
+const clearCookieOpts = {
+  httpOnly: true,
+  secure: isProduction,
+  sameSite: isProduction ? "none" : "lax",
+  path: "/",
 };
 
 export async function register(req, res) {
@@ -63,6 +69,17 @@ export async function getMe(req, res) {
 }
 
 export async function logout(req, res) {
-  res.clearCookie("access_token", cookieOpts);
+  res.clearCookie("access_token", clearCookieOpts);
+
+  res.clearCookie("access_token", {
+    ...clearCookieOpts,
+    domain: ".vercel.app",
+  });
+
+  res.clearCookie("access_token", {
+    ...clearCookieOpts,
+    domain: "herbit-backend.vercel.app",
+  });
+
   return ok(res, null, "Logged out");
 }

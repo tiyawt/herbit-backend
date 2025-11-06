@@ -56,7 +56,11 @@ app.use((req, res, next) => {
 });
 
 // Global middleware
-app.use(express.json());
+const jsonBodyLimit = process.env.JSON_BODY_LIMIT || "5mb";
+const formBodyLimit = process.env.FORM_BODY_LIMIT || "5mb";
+
+app.use(express.json({ limit: jsonBodyLimit }));
+app.use(express.urlencoded({ extended: true, limit: formBodyLimit }));
 app.use(cookieParser());
 app.use(morgan("dev"));
 app.use(passport.initialize());
