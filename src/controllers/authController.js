@@ -3,8 +3,7 @@ import { registerUser, loginUser, me } from "../services/authService.js";
 import { createTreeTrackerForUser } from "./treeTrackersController.js";
 
 const isProduction = process.env.NODE_ENV === "production";
-const cookieDomain =
-  process.env.COOKIE_DOMAIN || (isProduction ? ".vercel.app" : undefined);
+const cookieDomain = process.env.COOKIE_DOMAIN || null;
 
 const cookieOpts = {
   httpOnly: true,
