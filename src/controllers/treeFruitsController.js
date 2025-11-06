@@ -46,7 +46,7 @@ export const claimFruit = async (req, res) => {
     await recordPointsChange({
       userId,
       pointsAmount: fruit.pointsAwarded ?? 0,
-      source: "fruit",
+      source: "tree",
       referenceId: fruit._id?.toString() ?? null,
       createdAt: fruit.claimedAt ?? new Date(),
     });
