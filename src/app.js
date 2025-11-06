@@ -18,6 +18,7 @@ import weeklyProgressRoutes from "./routes/weeklyProgressRoutes.js";
 import userManagementRoutes from "./routes/userManagementRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import dailyTaskAdminRoutes from "./routes/dailyTaskAdminRoutes.js";
+import aiRoutes from "./routes/aiRoutes.js";
 import { autoCancelExpiredProjects } from "./controllers/ecoenzimController.js";
 
 const app = express();
@@ -94,6 +95,7 @@ app.use("/api/admin/daily", dailyTaskAdminRoutes);
 app.use("/api/progress", weeklyProgressRoutes);
 app.use("/api/ecoenzim", ecoenzimRoutes);
 app.use("/api/users", userManagementRoutes);
+app.use("/api/ai", aiRoutes);
 
 cron.schedule("0 * * * *", async () => {
   console.log("⏳ Cek project kadaluarsa...");
